@@ -1,0 +1,7 @@
+# 极速运行镜像 - 不在容器内编译
+FROM public.ecr.aws/docker/library/eclipse-temurin:17-jre
+WORKDIR /app
+# 复制本地构建好的 jar
+COPY target/*.jar app.jar
+EXPOSE 4000
+ENTRYPOINT ["java", "-jar", "app.jar"]

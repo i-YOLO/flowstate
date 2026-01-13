@@ -1,0 +1,23 @@
+server:
+  port: 4000
+
+spring:
+  application:
+    name: flowstate-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/flowstate}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        # 移除显式方言配置，允许 Hibernate 6 自动高效探测 PostgreSQL 版本特性
+        jdbc:
+          lob:
+            non_contextual_creation: true
