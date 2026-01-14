@@ -16,6 +16,7 @@ import ReplyView from './components/ReplyView';
 import NotificationView from './components/NotificationView';
 import ChatView from './components/ChatView';
 import PublicProfileView from './components/PublicProfileView';
+import CategoryManagementView from './components/CategoryManagementView';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>(View.LOGIN);
@@ -100,10 +101,11 @@ export default function App() {
                 title: event.title,
                 startTime: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
                 endTime: `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`,
-                category: '工作' // Default or derive from color/data
+                category: event.subtitle // Use the category from the event
               });
               setCurrentView(View.ADD_TIME_RECORD);
             }}
+            onManageCategories={() => setCurrentView(View.CATEGORY_MANAGEMENT)}
           />
         );
       case View.COMMUNITY:
@@ -149,6 +151,8 @@ export default function App() {
         return <ChatView onBack={() => setCurrentView(View.NOTIFICATIONS)} onOpenProfile={() => setCurrentView(View.PUBLIC_PROFILE)} />;
       case View.PUBLIC_PROFILE:
         return <PublicProfileView onBack={() => setCurrentView(View.COMMUNITY)} onMessage={() => setCurrentView(View.CHAT)} />;
+      case View.CATEGORY_MANAGEMENT:
+        return <CategoryManagementView onBack={() => setCurrentView(View.CALENDAR)} />;
       default:
         return <CalendarView onOpenNewEntry={() => setCurrentView(View.NEW_ENTRY)} />;
     }

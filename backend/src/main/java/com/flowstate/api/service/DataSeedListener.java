@@ -8,9 +8,13 @@ import com.flowstate.api.repository.UserRepository;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class DataSeedListener {
+
+    private static final Logger logger = LoggerFactory.getLogger(DataSeedListener.class);
 
     private final UserRepository userRepository;
     private final HabitRepository habitRepository;
@@ -56,7 +60,7 @@ public class DataSeedListener {
                     .color("#3b82f6")
                     .build());
 
-            System.out.println("SEED DATA: Created Demo User with ID: " + demoUser.getId());
+            logger.info("SEED DATA: Created Demo User with ID: {}", demoUser.getId());
         }
     }
 }
