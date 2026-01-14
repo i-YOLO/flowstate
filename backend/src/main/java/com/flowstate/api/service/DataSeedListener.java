@@ -14,10 +14,13 @@ public class DataSeedListener {
 
     private final UserRepository userRepository;
     private final HabitRepository habitRepository;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
-    public DataSeedListener(UserRepository userRepository, HabitRepository habitRepository) {
+    public DataSeedListener(UserRepository userRepository, HabitRepository habitRepository,
+            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.habitRepository = habitRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -25,7 +28,7 @@ public class DataSeedListener {
         if (userRepository.count() == 0) {
             User demoUser = User.builder()
                     .email("demo@flowstate.com")
-                    .passwordHash("hashed_password")
+                    .passwordHash(passwordEncoder.encode("password"))
                     .name("Demo User")
                     .bio("Enjoying the flow state.")
                     .build();

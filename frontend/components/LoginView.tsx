@@ -1,12 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface LoginViewProps {
   onLogin: () => void;
+  onGoToRegister: () => void;
 }
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, onGoToRegister }) => {
+  const [email, setEmail] = useState('demo@flowstate.com');
+  const [password, setPassword] = useState('password');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('http://localhost:4000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('userEmail', data.email);
+        onLogin();
+      } else {
+        setError('登录失败，请检查邮箱和密码');
+      }
+    } catch (err) {
+      setError('无法连接到服务器，请稍后再试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div 
+    <div
       className="relative flex min-h-screen w-full flex-col overflow-x-hidden p-6 font-display transition-colors duration-300"
       style={{ backgroundColor: '#0D1117', color: '#E6EDF3' }}
     >
@@ -29,14 +60,22 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
       {/* Form Section */}
       <div className="flex flex-col w-full max-w-[480px] mx-auto gap-5">
-        
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl text-sm font-medium">
+            {error}
+          </div>
+        )}
+
         {/* Email Input */}
         <div className="flex flex-col gap-2">
-          <p className="text-slate-300 text-sm font-semibold px-1">邮箱或手机号</p>
-          <input 
-            className="w-full rounded-xl text-white focus:outline-0 focus:ring-2 focus:ring-[#2563EB] border border-[rgba(255,255,255,0.12)] bg-[#161B22] h-14 px-4 text-base font-normal transition-all placeholder:text-[#484F58]" 
-            placeholder="输入邮箱或手机号" 
-            type="text" 
+          <p className="text-slate-300 text-sm font-semibold px-1">邮箱地址</p>
+          <input
+            className="w-full rounded-xl text-white focus:outline-0 focus:ring-2 focus:ring-[#2563EB] border border-[rgba(255,255,255,0.12)] bg-[#161B22] h-14 px-4 text-base font-normal transition-all placeholder:text-[#484F58]"
+            placeholder="输入邮箱"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
@@ -47,23 +86,23 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             <a className="text-[#2563EB] text-sm font-bold hover:text-white transition-colors" href="#">忘记密码？</a>
           </div>
           <div className="flex w-full items-stretch rounded-xl border border-[rgba(255,255,255,0.12)] bg-[#161B22] focus-within:ring-2 focus-within:ring-[#2563EB] overflow-hidden transition-all">
-            <input 
-              className="flex-1 border-none bg-transparent h-14 text-white px-4 text-base font-normal outline-none focus:ring-0 placeholder:text-[#484F58]" 
-              placeholder="输入密码" 
-              type="password" 
+            <input
+              className="flex-1 border-none bg-transparent h-14 text-white px-4 text-base font-normal outline-none focus:ring-0 placeholder:text-[#484F58]"
+              placeholder="输入密码"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
-            <button className="text-slate-500 flex items-center justify-center px-4 hover:text-white transition-colors">
-              <span className="material-symbols-outlined">visibility</span>
-            </button>
           </div>
         </div>
 
         {/* Sign In Button */}
-        <button 
-          onClick={onLogin}
-          className="mt-4 w-full h-14 bg-[#2563EB] text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all duration-200 hover:bg-blue-500"
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="mt-4 w-full h-14 bg-[#2563EB] text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all duration-200 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          登录
+          {loading ? '正在登录...' : '登录'}
         </button>
 
         {/* Divider */}
@@ -84,19 +123,18 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </svg>
             Google
           </button>
-          <button className="flex items-center justify-center gap-3 w-full h-14 bg-white border border-white rounded-xl text-slate-950 font-semibold transition-opacity hover:opacity-90">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.11.78.9-.04 2.01-.83 3.43-.69 1.18.07 2.15.45 2.81 1.39-2.35 1.41-1.99 4.39.42 5.38-.56 1.4-1.31 2.8-1.77 3.11zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"></path>
-            </svg>
-            Apple
-          </button>
         </div>
 
         {/* Footer Link */}
         <div className="mt-8 mb-4 text-center">
           <p className="text-slate-500 text-base">
-            新用户？ 
-            <a className="text-white font-bold hover:text-[#2563EB] transition-colors ml-1" href="#">创建账号</a>
+            新用户？
+            <button
+              onClick={(e) => { e.preventDefault(); onGoToRegister(); }}
+              className="text-white font-bold hover:text-[#2563EB] transition-colors ml-1"
+            >
+              创建账号
+            </button>
           </p>
         </div>
       </div>
