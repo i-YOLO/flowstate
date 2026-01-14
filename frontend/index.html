@@ -6,84 +6,7 @@
     <title>FlowState</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              display: ['Inter', 'sans-serif'],
-            },
-            colors: {
-              primary: '#00f2ff', // Vibrant Cyan (Luminous)
-              'primary-dark': '#0891b2',
-              'accent-blue': '#3b82f6',
-              'accent-purple': '#bc13fe',
-              'accent-orange': '#ff8c00',
-              'accent-green': '#4ade80',
-              'accent-pink': '#f472b6',
-              'accent-cyan': '#22d3ee',
-              'background-light': '#f6f6f8',
-              'background-dark': '#0a0c10', // Deep Dark
-              'card-dark': '#161b22',
-              'surface-dark': '#161b22',
-              'border-dark': '#324467',
-            },
-            boxShadow: {
-              'glow': '0 0 20px -5px rgba(0, 242, 255, 0.5)',
-              'glow-card': '0 4px 24px -1px rgba(0, 0, 0, 0.5)',
-            }
-          },
-        },
-      }
-    </script>
-    <style>
-      body {
-        -webkit-tap-highlight-color: transparent;
-        background-color: #0a0c10; /* Outer background */
-        color: #ffffff;
-      }
-      .material-symbols-outlined {
-        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        user-select: none;
-      }
-      .material-symbols-outlined.filled {
-        font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-      }
-      
-      /* Effects */
-      .ios-blur {
-          backdrop-filter: blur(25px);
-          -webkit-backdrop-filter: blur(25px);
-      }
-      .luminous-glow {
-          box-shadow: 0 0 15px 2px rgba(59, 130, 246, 0.5); /* Blue glow */
-      }
-      .luminous-glow-green {
-          box-shadow: 0 0 15px 2px rgba(74, 222, 128, 0.5);
-      }
-      .glow-cyan {
-          filter: drop-shadow(0 0 8px rgba(0, 242, 255, 0.4));
-      }
-      .glow-purple {
-          filter: drop-shadow(0 0 8px rgba(188, 19, 254, 0.4));
-      }
-      .glow-orange {
-          filter: drop-shadow(0 0 8px rgba(255, 140, 0, 0.4));
-      }
-
-      /* Hide scrollbar */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-      }
-    </style>
-  <script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "recharts": "https://esm.sh/recharts@^3.6.0",
@@ -93,8 +16,7 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
-</head>
+  </head>
   <body>
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>

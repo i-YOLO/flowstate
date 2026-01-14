@@ -71,3 +71,31 @@
 - **新增注册页面**: 实现了 `RegisterView` 组件，支持用户姓名、邮箱、密码的输入及后端注册接口对接。
 - **全栈联调**: 联通了前端注册请求至后端 `/api/auth/register` API，并支持注册成功后的自动视图回切。
 - **自动登录检查**: 在 `App.tsx` 中增加了启动时的 Token 检查机制。
+
+## [2026-01-15 00:00]
+### ✨ 全栈功能落地 (Full Stack Features)
+#### 1. 📅 日历与时间记录 (Calendar & Time Records)
+- **后端支持**: 新增 `TimeRecord` 模块，完整的 Controller/Service/Repository 层，支持时间块的创建、更新、删除及按天查询。
+- **前端交互**: 
+  - 实现 `CalendarView` 的真实数据绑定，支持从后端加载每日时间记录。
+  - 新增 `AddTimeRecordView` 组件，支持“+1天”跨夜时间记录，自动计算时长与结束时间。
+  - 优化了时间轴的视觉呈现，支持不同分类的颜色区分。
+
+#### 2. ✅ 习惯追踪 (Habit Tracking)
+- **全链路打通**: 
+  - **创建习惯**: 前端 `AddHabitView` 对接后端 `/api/habits` 接口，支持自定义图标、颜色、目标值。
+  - **每日打卡**: 实现了 `/api/habits/{id}/log` 接口，支持前端实时打卡并即时反馈进度。
+  - **今日视图**: 优化了 `HomeView` 的数据加载逻辑，解决了数据懒加载导致的查询异常（事务优化）。
+
+#### 3. 🏷 分类管理 (Category Management)
+- **后端实现**: 新增 `Category` 实体及管理接口，支持用户自定义分类（名称、颜色、图标）。
+- **前端管理**: 新增 `CategoryManagementView` 页面，允许用户管理自己的时间/习惯分类体系。
+- **数据预设**: 优化已有的 `DataSeedListener`，为新用户自动初始化一套默认分类（工作、健康、学习等）。
+
+### 🛠 工程化与架构优化 (Engineering)
+- **样式系统重构**: 
+  - 彻底完成了 **Tailwind CSS 的本地化构建**，移除了 CDN依赖，提升加载速度与稳定性。
+  - 建立了标准的 `frontend/index.css` 样式入口，统一管理全局样式与图标字体。
+- **数据库交互增强**: 
+  - 针对 PostgreSQL 优化了 JPA 查询事务策略，消除了 `LazyInitializationException` 隐患，确保关联数据（如习惯日志）能稳定读取。
+

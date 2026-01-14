@@ -47,6 +47,8 @@ public class JwtProvider {
         return claims.getSubject();
     }
 
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtProvider.class);
+
     public boolean validateToken(String authToken) {
         try {
             Jwts.parser()
@@ -55,7 +57,7 @@ public class JwtProvider {
                     .parseSignedClaims(authToken);
             return true;
         } catch (JwtException | IllegalArgumentException e) {
-            // Log error
+            logger.error("JWT validation failed: {}", e.getMessage());
         }
         return false;
     }

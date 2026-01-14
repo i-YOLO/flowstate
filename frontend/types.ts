@@ -15,6 +15,7 @@ export enum View {
   NOTIFICATIONS = 'NOTIFICATIONS',
   CHAT = 'CHAT',
   PUBLIC_PROFILE = 'PUBLIC_PROFILE',
+  CATEGORY_MANAGEMENT = 'CATEGORY_MANAGEMENT',
 }
 
 export interface Habit {
