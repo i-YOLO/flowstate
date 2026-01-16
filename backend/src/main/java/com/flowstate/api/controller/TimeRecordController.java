@@ -4,9 +4,11 @@ import com.flowstate.api.dto.TimeRecordRequest;
 import com.flowstate.api.dto.TimeRecordResponse;
 import com.flowstate.api.security.UserDetailsImpl;
 import com.flowstate.api.service.TimeRecordService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,8 +24,13 @@ public class TimeRecordController {
     }
 
     @GetMapping
-    public List<TimeRecordResponse> getMyRecords(Authentication authentication) {
+    public List<TimeRecordResponse> getMyRecords(
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        if (date != null) {
+            return timeRecordService.getRecordsForUserByDate(userDetails.getId(), date);
+        }
         return timeRecordService.getRecordsForUser(userDetails.getId());
     }
 

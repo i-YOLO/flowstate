@@ -99,3 +99,39 @@
 - **数据库交互增强**: 
   - 针对 PostgreSQL 优化了 JPA 查询事务策略，消除了 `LazyInitializationException` 隐患，确保关联数据（如习惯日志）能稳定读取。
 
+## [2026-01-16 09:30]
+### 🎯 专注模式模块 (Focus Mode Module)
+- **后端架构**: 
+  - 新增 `FocusSession` 实体，支持记录专注会话（用户、分类、习惯、开始/结束时间、时长、状态）。
+  - 实现 `FocusSessionRepository` + `FocusSessionService`，支持创建会话、查询用户会话及今日统计。
+  - 新增 `/api/focus/today-stats` API，返回今日专注总时长和完成组数。
+- **前端集成**:
+  - `CalendarView.tsx` 中的 Focus Hub 从硬编码改为调用 API 获取真实数据。
+  - 切换到"专注"标签时自动拉取当天统计数据。
+
+### 📅 日历按日期筛选 (Calendar Date Filtering)
+- **后端支持**:
+  - `TimeRecord` 实体新增 `recordDate` 字段（LocalDate），用于区分不同日期的记录。
+  - `TimeRecordController` 的 GET 接口支持 `?date=YYYY-MM-DD` 查询参数，按日期筛选记录。
+  - `TimeRecordService` 新增 `getRecordsForUserByDate()` 方法。
+- **数据库迁移**:
+  - 执行 `ALTER TABLE time_records ADD COLUMN record_date DATE` 并用 `created_at::date` 初始化现有数据。
+- **前端改造**:
+  - `CalendarView` 中 `selectedDate` 类型从 `number` 改为 `Date`，切换日期时传递参数给 API。
+  - 刷新页面时自动加载当天数据，切换日期时重新获取对应日期的记录。
+  - 切换到日历标签时自动滚动到当前时间位置。
+
+### 📝 时间记录日期选择器 (Time Record Date Picker)
+- **UI 增强**:
+  - `AddTimeRecordView` 的"时间详情"区域新增日期选择器，默认为当前日期。
+  - 开始时间行显示可编辑的日期输入框；结束时间行显示只读日期（跨天自动 +1 天）。
+  - 创建/编辑记录时将 `recordDate` 一并提交到后端。
+
+### 🔐 Token 过期自动登出 (Session Expiry Handling)
+- **API 层封装**:
+  - 新增 `frontend/utils/api.ts`，封装 `apiFetch()` 函数统一处理认证头和错误。
+  - 当 API 返回 401 或 403 时，自动清除本地 Token 并触发登出回调。
+- **全局集成**:
+  - `App.tsx` 注册 Token 过期回调，检测到过期后自动跳转登录页面。
+  - 所有前端 API 调用逐步迁移至 `apiFetch`，统一认证和错误处理逻辑。
+

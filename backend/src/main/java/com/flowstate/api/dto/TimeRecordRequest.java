@@ -1,5 +1,6 @@
 package com.flowstate.api.dto;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public class TimeRecordRequest {
@@ -10,6 +11,7 @@ public class TimeRecordRequest {
     private String category;
     private String color;
     private UUID habitId;
+    private LocalDate recordDate;
 
     public TimeRecordRequest() {
     }
@@ -68,5 +70,13 @@ public class TimeRecordRequest {
 
     public void setHabitId(UUID habitId) {
         this.habitId = habitId;
+    }
+
+    public LocalDate getRecordDate() {
+        return recordDate;
+    }
+
+    public void setRecordDate(LocalDate recordDate) {
+        this.recordDate = recordDate;
     }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { apiFetch, API_BASE_URL } from '../utils/api';
 
 interface CalendarViewProps {
     onOpenNewEntry?: () => void;
@@ -20,9 +21,25 @@ export interface CalendarEvent {
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocus, onCreateEvent, onEditEvent, onManageCategories }) => {
-    const [selectedDate, setSelectedDate] = useState<number>(5);
+    const [now, setNow] = useState(new Date());
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-    const dates = [1, 2, 3, 4, 5, 6, 7];
+
+    // Generate dates for the current week starting from Sunday
+    const weekDates = useMemo(() => {
+        const d = new Date(now);
+        const day = d.getDay();
+        const diff = d.getDate() - day; // Back to Sunday
+        const startOfWeek = new Date(d.setDate(diff));
+
+        return Array.from({ length: 7 }, (_, i) => {
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + i);
+            return date;
+        });
+    }, [now.toDateString()]); // Only recalculate when the day changes
+
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [activeTab, setActiveTab] = useState<'calendar' | 'focus'>('calendar');
 
     // Config
     const START_HOUR = 0; // Changed to 0 for full day
@@ -30,58 +47,105 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocu
     const PIXELS_PER_MIN = 1.8; // Height of 1 minute in pixels
     const SNAP_MINUTES = 15; // Snap to 15 min blocks
 
-    // Simulated Current Time (matching the red line visualization)
-    const CURRENT_TIME_HOUR = 11;
-    const CURRENT_TIME_MIN = 15;
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 60000); // Update every minute
+        return () => clearInterval(timer);
+    }, []);
+
+    const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
 
     // Initial Events State
     const [events, setEvents] = useState<CalendarEvent[]>([]);
 
-    const fetchEvents = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:4000/api/time-records', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
+    // Focus Stats State
+    const [focusStats, setFocusStats] = useState<{ totalMinutes: number; completedSessions: number }>({ totalMinutes: 0, completedSessions: 0 });
+
+    // 格式化日期为 YYYY-MM-DD
+    const formatDateForApi = (date: Date): string => {
+        return date.toISOString().split('T')[0];
+    };
+
+    const fetchEvents = async (date: Date) => {
+        const dateStr = formatDateForApi(date);
+        const data = await apiFetch<any[]>(`${API_BASE_URL}/api/time-records?date=${dateStr}`);
+        if (data) {
+            const mapped = data.map((item: any) => {
+                const category = item.category || 'Default';
+                let colorKey = item.color || 'indigo';
+
+                if (!item.color) {
+                    if (category === '工作' || category === 'Work') colorKey = 'indigo';
+                    else if (category === '学习' || category === 'Study') colorKey = 'amber';
+                    else if (category === '运动' || category === 'Exercise') colorKey = 'emerald';
+                    else if (category === '社交' || category === 'Social') colorKey = 'rose';
+                    else if (category === '休息' || category === 'Rest') colorKey = 'purple';
+                    else colorKey = 'indigo';
                 }
+
+                return {
+                    id: item.id,
+                    title: item.title,
+                    subtitle: category,
+                    startTime: item.startTime,
+                    duration: item.duration,
+                    color: colorKey,
+                    sortIndex: 0
+                };
             });
-            if (response.ok) {
-                const data = await response.json();
-                // Map backend response to local CalendarEvent interface
-                const mapped = data.map((item: any) => {
-                    const category = item.category || 'Default';
-                    // Support both Chinese and English categories for coloring
-                    let colorKey = item.color || 'indigo'; // Use backend color if provided
-
-                    if (!item.color) {
-                        if (category === '工作' || category === 'Work') colorKey = 'indigo';
-                        else if (category === '学习' || category === 'Study') colorKey = 'amber';
-                        else if (category === '运动' || category === 'Exercise') colorKey = 'emerald';
-                        else if (category === '社交' || category === 'Social') colorKey = 'rose';
-                        else if (category === '休息' || category === 'Rest') colorKey = 'purple';
-                        else colorKey = 'indigo';
-                    }
-
-                    return {
-                        id: item.id,
-                        title: item.title,
-                        subtitle: category,
-                        startTime: item.startTime,
-                        duration: item.duration,
-                        color: colorKey,
-                        sortIndex: 0
-                    };
-                });
-                setEvents(mapped);
-            }
-        } catch (err) {
-            console.error('Failed to fetch events', err);
+            setEvents(mapped);
+            console.log(`%c[SYNC] CalendarView: Events fetched for ${dateStr}`, 'color: #6366f1; font-weight: bold;', mapped.length);
         }
     };
 
+    const fetchFocusStats = async () => {
+        const data = await apiFetch<{ totalMinutes: number; completedSessions: number }>(`${API_BASE_URL}/api/focus/today-stats`);
+        if (data) {
+            setFocusStats({
+                totalMinutes: data.totalMinutes || 0,
+                completedSessions: data.completedSessions || 0
+            });
+            console.log('%c[SYNC] FocusStats: Fetched today stats', 'color: #10b981; font-weight: bold;', data);
+        }
+    };
+
+    // 滚动到当前时间的辅助函数
+    const scrollToCurrentTime = () => {
+        if (timelineRef.current) {
+            const targetMinutes = Math.max(0, currentTotalMinutes - 120); // 当前时间 - 2小时
+            const scrollTop = (targetMinutes - (START_HOUR * 60)) * PIXELS_PER_MIN;
+            timelineRef.current.scrollTop = scrollTop;
+            console.log('%c[SCROLL] Scrolled to current time', 'color: #8b5cf6; font-weight: bold;');
+        }
+    };
+
+    // 组件首次挂载时：加载今天的数据并滚动到当前时间
     useEffect(() => {
-        fetchEvents();
+        console.log('%c[INIT] CalendarView mounted. Fetching initial data...', 'color: #6366f1; font-weight: bold;');
+        fetchEvents(selectedDate);
+        // 延迟滚动，确保 DOM 渲染完成
+        setTimeout(scrollToCurrentTime, 100);
     }, []);
+
+    // selectedDate 变化时：重新获取该日期的数据
+    useEffect(() => {
+        if (activeTab === 'calendar') {
+            console.log(`%c[SYNC] Date changed to ${formatDateForApi(selectedDate)}. Fetching records...`, 'color: #6366f1; font-weight: bold;');
+            fetchEvents(selectedDate);
+        }
+    }, [selectedDate]);
+
+    // Tab 切换时：获取对应数据，日历页面还要滚动到当前时间
+    useEffect(() => {
+        if (activeTab === 'calendar') {
+            console.log('%c[SYNC] CalendarView: Tab changed to calendar. Fetching records...', 'color: #6366f1; font-weight: bold;');
+            fetchEvents(selectedDate);
+            // 延迟滚动，确保数据加载和 DOM 更新完成
+            setTimeout(scrollToCurrentTime, 100);
+        } else if (activeTab === 'focus') {
+            console.log('%c[SYNC] CalendarView: Tab changed to focus. Fetching stats...', 'color: #6366f1; font-weight: bold;');
+            fetchFocusStats();
+        }
+    }, [activeTab]);
 
     // Interaction State
     const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -100,17 +164,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocu
     const lastPointerYRef = useRef(0);
     const autoScrollRafRef = useRef<number | null>(null);
     const autoScrollSpeedRef = useRef(0);
-
-    // Auto-scroll to Current Time - 2h on Mount
-    useEffect(() => {
-        if (timelineRef.current) {
-            const currentTotalMinutes = CURRENT_TIME_HOUR * 60 + CURRENT_TIME_MIN;
-            const targetMinutes = Math.max(0, currentTotalMinutes - 120); // Current Time - 2h
-            const scrollTop = (targetMinutes - (START_HOUR * 60)) * PIXELS_PER_MIN;
-
-            timelineRef.current.scrollTop = scrollTop;
-        }
-    }, []);
 
     // Layout Calculation Logic for Overlapping Events
     const eventLayouts = useMemo(() => {
@@ -508,7 +561,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocu
                         <span className="material-symbols-outlined text-slate-900 dark:text-white">tune</span>
                     </button>
                     <div className="flex flex-col items-center">
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">2024年 9月</h2>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{now.getFullYear()}年 {now.getMonth() + 1}月</h2>
                         <span className="text-[10px] font-bold uppercase text-primary tracking-widest">今天</span>
                     </div>
                     <div className="flex items-center justify-center size-10">
@@ -516,149 +569,236 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocu
                     </div>
                 </div>
 
-                {/* Week Strip */}
-                <div className="px-4 pb-2">
-                    <div className="grid grid-cols-7 mb-2">
-                        {weekDays.map((d, i) => (
-                            <p key={i} className="text-[11px] font-bold text-center text-slate-400 dark:text-slate-500">{d}</p>
-                        ))}
+                <div className="flex flex-col items-center gap-4 px-4 pb-4">
+                    {/* Segmented Control Tab Switcher */}
+                    <div className="relative w-full p-1 flex bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden">
+                        <div
+                            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white dark:bg-white/10 rounded-xl shadow-sm transition-all duration-300 ease-out-expo ${activeTab === 'focus' ? 'translate-x-full' : 'translate-x-0'}`}
+                            style={{ filter: activeTab === 'focus' ? 'drop-shadow(0 0 8px rgba(0, 242, 255, 0.2))' : 'none' }}
+                        ></div>
+                        <button
+                            onClick={() => setActiveTab('calendar')}
+                            className={`relative flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold transition-colors z-10 ${activeTab === 'calendar' ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}
+                        >
+                            <span className="material-symbols-outlined text-lg">calendar_month</span>
+                            <span>日历</span>
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('focus')}
+                            className={`relative flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold transition-colors z-10 ${activeTab === 'focus' ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
+                        >
+                            <span className="material-symbols-outlined text-lg">timer</span>
+                            <span>专注</span>
+                        </button>
                     </div>
-                    <div className="grid grid-cols-7 gap-y-1">
-                        {dates.map((date) => (
-                            <div key={date} className="flex items-center justify-center h-10 cursor-pointer" onClick={() => setSelectedDate(date)}>
-                                <div className={`flex items-center justify-center size-9 rounded-full text-sm font-medium transition-all ${selectedDate === date
-                                    ? 'bg-primary text-white font-bold shadow-glow'
-                                    : 'text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-800'
-                                    }`}>
-                                    {date}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
 
-                {/* Start Focus Button - Fixed here */}
-                <div className="px-4 mb-4">
-                    <button
-                        onClick={onStartFocus}
-                        className="w-full flex items-center justify-center gap-2 h-12 bg-white dark:bg-card-dark border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm active:scale-[0.99] transition-all group"
-                    >
-                        <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                            <span className="material-symbols-outlined text-primary text-[16px]">play_arrow</span>
+                    {/* Conditional rendering for Calendar-specific header parts */}
+                    {activeTab === 'calendar' && (
+                        <div className="w-full">
+                            <div className="grid grid-cols-7 mb-2">
+                                {weekDays.map((d, i) => (
+                                    <p key={i} className="text-[11px] font-bold text-center text-slate-400 dark:text-slate-500">{d}</p>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-y-1">
+                                {weekDates.map((dateObj) => {
+                                    const date = dateObj.getDate();
+                                    const isToday = dateObj.toDateString() === now.toDateString();
+                                    const isSelected = selectedDate.toDateString() === dateObj.toDateString();
+
+                                    return (
+                                        <div key={date} className="flex items-center justify-center h-10 cursor-pointer" onClick={() => setSelectedDate(new Date(dateObj))}>
+                                            <div className={`flex items-center justify-center size-9 rounded-full text-sm font-medium transition-all ${isSelected
+                                                ? 'bg-primary text-white font-bold shadow-glow'
+                                                : isToday
+                                                    ? 'border border-primary text-primary font-bold'
+                                                    : 'text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-800'
+                                                }`}>
+                                                {date}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">开始专注模式</span>
-                    </button>
+                    )}
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto overflow-x-hidden pb-32" ref={timelineRef} style={{ touchAction: draggingId ? 'none' : 'auto' }}>
-
-                {/* Timeline Area */}
-                <div
-                    className="relative w-full border-t border-slate-100 dark:border-slate-800/50"
-                    style={{ height: (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MIN + 100 }}
-                    onClick={handleTimelineClick}
-                    onPointerDown={() => { hasDraggedRef.current = false; }}
-                >
-                    {/* Background Grid */}
-                    {hours.map((hour) => (
-                        <div
-                            key={hour}
-                            className="absolute w-full flex items-center group pointer-events-none"
-                            style={{ top: (hour - START_HOUR) * 60 * PIXELS_PER_MIN }}
-                        >
-                            <div className="w-16 text-right pr-4 text-[10px] font-bold text-slate-400 dark:text-slate-600 -translate-y-1/2">
-                                {hour}:00
-                            </div>
-                            <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800"></div>
-                        </div>
-                    ))}
-
-                    {/* Current Time Line (Simulated 11:15) */}
+                {activeTab === 'calendar' ? (
                     <div
-                        className="absolute w-full flex items-center z-10 pointer-events-none"
-                        style={{ top: ((CURRENT_TIME_HOUR * 60 + CURRENT_TIME_MIN) - (START_HOUR * 60)) * PIXELS_PER_MIN }}
+                        className="relative w-full border-t border-slate-100 dark:border-slate-800/50"
+                        style={{ height: (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MIN + 100 }}
+                        onClick={handleTimelineClick}
+                        onPointerDown={() => { hasDraggedRef.current = false; }}
                     >
-                        <div className="w-16"></div>
-                        <div className="relative flex-1">
-                            <div className="absolute -left-[5px] top-[-5px] size-2.5 rounded-full bg-primary shadow-glow"></div>
-                            <div className="h-[2px] w-full bg-primary"></div>
-                            <span className="absolute left-2 -top-6 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg">{CURRENT_TIME_HOUR}:{CURRENT_TIME_MIN}</span>
+                        {/* Background Grid */}
+                        {hours.map((hour) => (
+                            <div
+                                key={hour}
+                                className="absolute w-full flex items-center group pointer-events-none"
+                                style={{ top: (hour - START_HOUR) * 60 * PIXELS_PER_MIN }}
+                            >
+                                <div className="w-16 text-right pr-4 text-[10px] font-bold text-slate-400 dark:text-slate-600 -translate-y-1/2">
+                                    {hour}:00
+                                </div>
+                                <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800"></div>
+                            </div>
+                        ))}
+
+                        {/* Current Time Line */}
+                        <div
+                            className="absolute w-full flex items-center z-10 pointer-events-none"
+                            style={{ top: (currentTotalMinutes - (START_HOUR * 60)) * PIXELS_PER_MIN }}
+                        >
+                            <div className="w-16"></div>
+                            <div className="relative flex-1">
+                                <div className="absolute -left-[5px] top-[-5px] size-2.5 rounded-full bg-primary shadow-glow"></div>
+                                <div className="h-[2px] w-full bg-primary"></div>
+                                <span className="absolute left-2 -top-6 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg">
+                                    {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
+                                </span>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Events Wrapper */}
-                    <div className="absolute inset-0 left-16 right-4 pointer-events-none">
-                        {events.map((ev) => {
-                            const top = (ev.startTime - (START_HOUR * 60)) * PIXELS_PER_MIN;
-                            const height = ev.duration * PIXELS_PER_MIN;
-                            const styles = getEventColor(ev.color);
-                            const isDraggingThis = draggingId === ev.id;
-                            const layout = eventLayouts[ev.id] || { width: '100%', left: '0%' };
+                        {/* Events Wrapper */}
+                        <div className="absolute inset-0 left-16 right-4 pointer-events-none">
+                            {events.map((ev) => {
+                                const top = (ev.startTime - (START_HOUR * 60)) * PIXELS_PER_MIN;
+                                const height = ev.duration * PIXELS_PER_MIN;
+                                const styles = getEventColor(ev.color);
+                                const isDraggingThis = draggingId === ev.id;
+                                const layout = eventLayouts[ev.id] || { width: '100%', left: '0%' };
 
-                            return (
-                                <div
-                                    key={ev.id}
-                                    className={`absolute transition-all pointer-events-auto ${isDraggingThis ? 'z-50 scale-[1.02] opacity-90' : 'z-10'}`}
-                                    style={{
-                                        top: `${top}px`,
-                                        height: `${height}px`,
-                                        width: layout.width,
-                                        left: layout.left,
-                                        transform: isDraggingThis ? `translateX(${dragX}px)` : undefined,
-                                    }}
-                                    onClick={(e) => handleClick(e, ev)}
-                                >
-                                    {/* Card Body */}
+                                return (
                                     <div
-                                        className={`relative w-full h-full rounded-xl border-l-4 overflow-hidden select-none touch-none ${styles.bg} ${styles.border}`}
-                                        onPointerDown={(e) => handlePointerDown(e, ev, 'move')}
+                                        key={ev.id}
+                                        className={`absolute transition-all pointer-events-auto ${isDraggingThis ? 'z-50 scale-[1.02] opacity-90' : 'z-10'}`}
+                                        style={{
+                                            top: `${top}px`,
+                                            height: `${height}px`,
+                                            width: layout.width,
+                                            left: layout.left,
+                                            transform: isDraggingThis ? `translateX(${dragX}px)` : undefined,
+                                        }}
+                                        onClick={(e) => handleClick(e, ev)}
                                     >
-                                        {/* Top Resize Handle */}
+                                        {/* Card Body */}
                                         <div
-                                            className="absolute top-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20"
-                                            onPointerDown={(e) => handlePointerDown(e, ev, 'resize-top')}
+                                            className={`relative w-full h-full rounded-xl border-l-4 overflow-hidden select-none touch-none ${styles.bg} ${styles.border}`}
+                                            onPointerDown={(e) => handlePointerDown(e, ev, 'move')}
                                         >
-                                            <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mt-1"></div>
-                                        </div>
-
-                                        {/* Content */}
-                                        <div className="p-3 pt-4 h-full flex flex-col justify-center">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <div className="flex flex-col min-w-0">
-                                                    {/* Time Label */}
-                                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-tight mb-0.5 block">
-                                                        {formatTime(ev.startTime)}
-                                                    </span>
-                                                    <h4 className={`text-sm font-bold leading-tight truncate ${styles.text}`}>{ev.title}</h4>
-                                                </div>
-                                                {ev.avatars && (
-                                                    <div className="flex -space-x-2 shrink-0">
-                                                        {ev.avatars.map((av, i) => (
-                                                            <div key={i} className="size-5 rounded-full border-2 border-background-dark bg-cover" style={{ backgroundImage: `url('${av}')` }}></div>
-                                                        ))}
-                                                    </div>
-                                                )}
+                                            {/* Top Resize Handle */}
+                                            <div
+                                                className="absolute top-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20"
+                                                onPointerDown={(e) => handlePointerDown(e, ev, 'resize-top')}
+                                            >
+                                                <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mt-1"></div>
                                             </div>
-                                            <p className={`mt-0.5 text-[10px] font-medium truncate ${styles.sub}`}>
-                                                {ev.subtitle} • {Math.round(ev.duration)} 分钟
-                                            </p>
-                                        </div>
 
-                                        {/* Bottom Resize Handle */}
-                                        <div
-                                            className="absolute bottom-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20 flex items-end"
-                                            onPointerDown={(e) => handlePointerDown(e, ev, 'resize-bottom')}
-                                        >
-                                            <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mb-1"></div>
+                                            {/* Content */}
+                                            <div className="p-3 pt-4 h-full flex flex-col justify-center">
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <div className="flex flex-col min-w-0">
+                                                        {/* Time Label */}
+                                                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-tight mb-0.5 block">
+                                                            {formatTime(ev.startTime)}
+                                                        </span>
+                                                        <h4 className={`text-sm font-bold leading-tight truncate ${styles.text}`}>{ev.title}</h4>
+                                                    </div>
+                                                    {ev.avatars && (
+                                                        <div className="flex -space-x-2 shrink-0">
+                                                            {ev.avatars.map((av, i) => (
+                                                                <div key={i} className="size-5 rounded-full border-2 border-background-dark bg-cover" style={{ backgroundImage: `url('${av}')` }}></div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className={`mt-0.5 text-[10px] font-medium truncate ${styles.sub}`}>
+                                                    {ev.subtitle} • {Math.round(ev.duration)} 分钟
+                                                </p>
+                                            </div>
+
+                                            {/* Bottom Resize Handle */}
+                                            <div
+                                                className="absolute bottom-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20 flex items-end"
+                                                onPointerDown={(e) => handlePointerDown(e, ev, 'resize-bottom')}
+                                            >
+                                                <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mb-1"></div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
+                ) : (
+                    /* Focus Tab Content */
+                    <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in-95 duration-500">
+                        {/* Summary Header */}
+                        <div className="mb-12">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-2 block">Focus Hub • 专注中心</span>
+                            <h3 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">保持专注，<br />成就伟大。</h3>
+                            <div className="flex items-center justify-center gap-4 mt-6">
+                                <div className="px-4 py-2 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5">
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">今日专注</span>
+                                    <span className="text-lg font-bold text-slate-900 dark:text-white">{focusStats.totalMinutes} <span className="text-xs font-medium opacity-50">分钟</span></span>
+                                </div>
+                                <div className="px-4 py-2 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5">
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">完成组数</span>
+                                    <span className="text-lg font-bold text-slate-900 dark:text-white">{focusStats.completedSessions} <span className="text-xs font-medium opacity-50">组</span></span>
+                                </div>
+                            </div>
+                        </div>
 
-                </div>
+                        {/* Focus Hub Center - Precise Interaction Zone with Geometric Validation */}
+                        <div className="relative size-80 flex items-center justify-center">
+                            {/* Decorative Background - Non-interactive */}
+                            <div className="absolute inset-0 z-0 pointer-events-none">
+                                <div className="absolute inset-0 rounded-full bg-primary/20 blur-3xl animate-pulse"></div>
+                                <div className="absolute inset-[-20px] rounded-full border border-primary/10 animate-ping [animation-duration:3s]"></div>
+                                <div className="absolute inset-[-40px] rounded-full border border-primary/5 animate-ping [animation-duration:4s]"></div>
+                            </div>
+
+                            {/* Precise Action Button - Uses geometric validation for click accuracy */}
+                            <button
+                                className="relative z-50 size-48 rounded-full bg-white dark:bg-card-dark border-4 border-primary flex flex-col items-center justify-center shadow-glow-lg active:scale-95 transition-all cursor-pointer overflow-hidden p-0 m-0"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+
+                                    // Geometric validation: only trigger if click is inside the circular button
+                                    const button = e.currentTarget;
+                                    const rect = button.getBoundingClientRect();
+                                    const centerX = rect.left + rect.width / 2;
+                                    const centerY = rect.top + rect.height / 2;
+                                    const radius = rect.width / 2;
+
+                                    const clickX = e.clientX;
+                                    const clickY = e.clientY;
+                                    const distance = Math.sqrt(Math.pow(clickX - centerX, 2) + Math.pow(clickY - centerY, 2));
+
+                                    if (distance <= radius) {
+                                        console.log('%c[DEBUG] Focus Hub: Precise Click Triggered.', 'color: #10b981; font-weight: bold;');
+                                        onStartFocus?.();
+                                    } else {
+                                        console.log('%c[DEBUG] Focus Hub: Click outside button radius, ignored.', 'color: #f59e0b;');
+                                    }
+                                }}
+                            >
+                                <div className="flex flex-col items-center justify-center w-full h-full hover:bg-primary/5 transition-colors">
+                                    <span className="material-symbols-outlined text-5xl text-primary filled mb-2">timer</span>
+                                    <span className="text-sm font-black text-slate-900 dark:text-white tracking-widest uppercase">开始专注</span>
+                                </div>
+                            </button>
+                        </div>
+
+                        <p className="mt-12 text-xs font-medium text-slate-400 dark:text-white/40 max-w-[200px] leading-relaxed">
+                            点击开始一个经典的番茄钟，<br />让时间流逝变得有意义
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     );
