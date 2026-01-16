@@ -21,3 +21,6 @@ spring:
         jdbc:
           lob:
             non_contextual_creation: true
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSS

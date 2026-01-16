@@ -93,7 +93,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onOpenNewEntry, onOpenCalendar, onA
     return (
         <div className="flex flex-col h-full overflow-y-auto bg-background-dark no-scrollbar">
             {/* Header */}
-            <div className="sticky top-0 z-30 flex items-center justify-between p-4 pb-4 border-b bg-background-dark/80 ios-blur border-slate-800">
+            <div className="sticky top-0 z-30 flex items-center justify-between p-4 pb-4 border-b bg-background-dark/80 backdrop-blur-xl border-white/5 shadow-sm shadow-black/20">
                 <div className="flex items-center size-10 shrink-0"></div>
                 <div className="flex-1 px-4 text-center">
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">{dateStr}</p>
@@ -102,7 +102,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onOpenNewEntry, onOpenCalendar, onA
                 <div className="flex items-center justify-end">
                     <button
                         onClick={onAddHabit}
-                        className="flex items-center justify-center text-white transition-transform rounded-full cursor-pointer size-10 bg-accent-blue luminous-glow active:scale-90"
+                        className="flex items-center justify-center text-white transition-all rounded-full cursor-pointer size-10 bg-primary shadow-[0_0_20px_rgba(0,242,255,0.3)] hover:shadow-[0_0_30px_rgba(0,242,255,0.5)] active:scale-90"
                     >
                         <span className="material-symbols-outlined text-[24px]">add</span>
                     </button>

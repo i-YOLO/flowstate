@@ -4,4 +4,5 @@ WORKDIR /app
 # 复制本地构建好的 jar
 COPY target/*.jar app.jar
 EXPOSE 4000
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# 设置 JVM 时区为 Asia/Shanghai (UTC+8)
+ENTRYPOINT ["java", "-Duser.timezone=Asia/Shanghai", "-jar", "app.jar"]

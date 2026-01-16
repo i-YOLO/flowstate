@@ -5,10 +5,21 @@ interface FocusModeViewProps {
     onQuit: () => void;
     habitId?: string;
     categoryId?: string;
+    initialMode?: 'pomodoro' | 'stopwatch';
+    initialDuration?: number; // in minutes
 }
 
-const FocusModeView: React.FC<FocusModeViewProps> = ({ onPause, onQuit, habitId, categoryId }) => {
-    const [timeLeft, setTimeLeft] = useState(25 * 60);
+const FocusModeView: React.FC<FocusModeViewProps> = ({ 
+    onPause, 
+    onQuit, 
+    habitId, 
+    categoryId, 
+    initialMode = 'pomodoro', 
+    initialDuration = 25 
+}) => {
+    // For Stopwatch: timeLeft represents elapsed time
+    // For Pomodoro: timeLeft represents remaining time
+    const [timeLeft, setTimeLeft] = useState(initialMode === 'stopwatch' ? 0 : initialDuration * 60);
     const [isActive, setIsActive] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isFinished, setIsFinished] = useState(false);
@@ -16,8 +27,8 @@ const FocusModeView: React.FC<FocusModeViewProps> = ({ onPause, onQuit, habitId,
     const [toastMessage, setToastMessage] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    const totalTime = 25 * 60;
-    const startTimeStamp = React.useRef<Date>(new Date());
+    const totalTime = initialDuration * 60;
+    const startTimeRef = React.useRef<number | null>(null);
     const expectedEndTimeRef = React.useRef<number | null>(null);
 
     // Update real-world clock every second
@@ -26,32 +37,86 @@ const FocusModeView: React.FC<FocusModeViewProps> = ({ onPause, onQuit, habitId,
         return () => clearInterval(timer);
     }, []);
 
+    // Timer Logic
     useEffect(() => {
         let interval: number;
 
-        if (isActive && timeLeft > 0) {
-            // Set the expected absolute end time when starting/resuming
-            expectedEndTimeRef.current = Date.now() + timeLeft * 1000;
+        if (isActive) {
+            if (!startTimeRef.current) {
+                startTimeRef.current = Date.now();
+            }
+
+            // Set the expected absolute end time when starting/resuming for Pomodoro
+            if (initialMode === 'pomodoro' && !expectedEndTimeRef.current) {
+                expectedEndTimeRef.current = Date.now() + timeLeft * 1000;
+            }
 
             interval = window.setInterval(() => {
-                if (expectedEndTimeRef.current) {
-                    const remaining = Math.max(0, Math.round((expectedEndTimeRef.current - Date.now()) / 1000));
+                const now = Date.now();
 
-                    if (remaining <= 0) {
-                        setTimeLeft(0);
-                        setIsActive(false);
-                        handleFinish(true);
-                    } else {
-                        setTimeLeft(remaining);
+                if (initialMode === 'stopwatch') {
+                    // Stopwatch: Count Up based on start time
+                    // We need to account for pauses, but for MVP simplifying to simpler elapsed logic
+                    // A robust implementation would subtract totalPausedTime
+                    if (startTimeRef.current) {
+                        const elapsed = Math.floor((now - startTimeRef.current) / 1000);
+                        setTimeLeft(elapsed); // In stopwatch mode, timeLeft is actually elapsed time
+                    }
+                } else {
+                    // Pomodoro: Count Down
+                    if (expectedEndTimeRef.current) {
+                        const remaining = Math.max(0, Math.round((expectedEndTimeRef.current - now) / 1000));
+                        if (remaining <= 0) {
+                            setTimeLeft(0);
+                            setIsActive(false);
+                            handleFinish(true);
+                        } else {
+                            setTimeLeft(remaining);
+                        }
                     }
                 }
-            }, 500); // Check more frequently (every 0.5s) but calculate based on timestamps
+            }, 500);
+        } else {
+            // When paused, we clear refs to allow resuming correctly
+            // Note: This simple pause logic might lose millisecond precision on resume, which is fine for this use case
+            if (initialMode === 'pomodoro') {
+                expectedEndTimeRef.current = null;
+            } else {
+                // For stopwatch, we'd need to shift startTimeRef on resume to account for pause duration
+                // For this MVP, we'll reset on pause -> resume logic needs refinement
+                // To keep it simple: we just clear the interval, and on resume we recalculate based on saved timeLeft
+            }
+            startTimeRef.current = null; 
         }
 
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [isActive]); // Only re-run when isActive changes
+        return () => clearInterval(interval);
+    }, [isActive, initialMode, timeLeft]);
+
+    // Handle initial Auto-Start
+    useEffect(() => {
+        // Slight delay to allow transition
+        const timer = setTimeout(() => setIsActive(true), 500);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const toggleTimer = () => {
+        if (isActive) {
+            // Pausing
+            setIsActive(false);
+            // In a real implementation we would save the "pause start time" here
+        } else {
+            // Resuming
+            // We need to adjust refs so calculating from 'now' works correctly
+            if (initialMode === 'stopwatch') {
+                 // Adjust start time so that (now - start) equals current timeLeft
+                 startTimeRef.current = Date.now() - (timeLeft * 1000);
+            }
+            // For Pomodoro, the existing logic recalculates expectedEndTimeRef based on timeLeft state in the Effect
+            setIsActive(true);
+        }
+    };
+
+
 
     const triggerToast = (message: string) => {
         setToastMessage(message);
@@ -86,7 +151,7 @@ const FocusModeView: React.FC<FocusModeViewProps> = ({ onPause, onQuit, habitId,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    startTime: startTimeStamp.current.toISOString(),
+                    startTime: new Date(startTimeRef.current || Date.now()).toISOString(),
                     endTime: endTime.toISOString(),
                     duration: durationMinutes,
                     habitId: habitId || null,
@@ -109,18 +174,7 @@ const FocusModeView: React.FC<FocusModeViewProps> = ({ onPause, onQuit, habitId,
         }
     };
 
-    const toggleTimer = () => {
-        if (isActive) {
-            expectedEndTimeRef.current = null;
-            onPause();
-        } else {
-            // Update start time if first time starting
-            if (timeLeft === totalTime) {
-                startTimeStamp.current = new Date();
-            }
-        }
-        setIsActive(!isActive);
-    };
+
 
     const formatTime = (date: Date) => {
         return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -165,8 +219,52 @@ const FocusModeView: React.FC<FocusModeViewProps> = ({ onPause, onQuit, habitId,
             <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
                 {/* Circular Progress Timer */}
                 <div className="relative flex items-center justify-center w-64 h-64 mb-12 shrink-0 transform translate-y-6">
+                    
+                    {/* UI/UX Pro Max Effects Container - MOVED OUTSIDE */}
+                    <div className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-500 z-0 ${isFinished ? 'opacity-0' : 'opacity-100'}`}>
+                         {/* LAYER 1: Deep Ambient Glow */}
+                         <div className="absolute inset-[-100px]">
+                            <div className={`w-full h-full rounded-full bg-primary/20 blur-[80px] transition-all duration-1000 ${isActive ? 'scale-110 opacity-100' : 'scale-100 opacity-50'}`}></div>
+                        </div>
+
+                        {/* LAYER 2: Expanding Ripples (Now much larger to be outside the circle) */}
+                        <div className={`absolute inset-[-60px] flex items-center justify-center ${isActive ? '' : 'hidden'}`}>
+                            <div className="absolute w-[120%] h-[120%] rounded-full border border-primary/20 animate-ripple-1"></div>
+                            <div className="absolute w-[130%] h-[130%] rounded-full border border-primary/10 animate-ripple-2"></div>
+                            <div className="absolute w-[140%] h-[140%] rounded-full border border-primary/5 animate-ripple-3"></div>
+                        </div>
+
+                         {/* LAYER 3: Orbital Particles (Wider Nebula Orbit) */}
+                         <div className={`absolute inset-[-100px] ${isActive ? '' : '[&_*]:[animation-play-state:paused] opacity-30 grayscale'}`}>
+                            {/* Orbit 1: Wide, Slow, Purple (Reverse) */}
+                            <div className="absolute inset-0 animate-orbit-reverse-slow border border-accent-purple/5 rounded-full">
+                                <div className="absolute top-1/2 -right-1 w-2.5 h-2.5 bg-accent-purple rounded-full shadow-[0_0_15px_rgba(188,19,254,0.8)]"></div>
+                            </div>
+                            
+                            {/* Orbit 2: Medium-Wide, Cyan */}
+                            <div className="absolute inset-10 animate-orbit-normal border border-primary/10 rounded-full border-dashed rotate-45">
+                                <div className="absolute -top-1.5 left-1/2 w-2 h-2 bg-primary rounded-full shadow-[0_0_12px_rgba(0,242,255,1)]"></div>
+                            </div>
+
+                            {/* Orbit 3: Inner-Outer, White */}
+                            <div className="absolute inset-20 animate-orbit-fast border border-white/5 rounded-full -rotate-12">
+                                <div className="absolute bottom-0 right-1/2 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_white]"></div>
+                            </div>
+
+                            {/* Orbit 4: Very Slow, Deep Cyan */}
+                            <div className="absolute inset-[-20px] animate-orbit-very-slow border border-primary/5 rounded-full rotate-90 opacity-40">
+                                <div className="absolute top-0 left-1/2 w-1.5 h-1.5 bg-primary rounded-full"></div>
+                            </div>
+
+                            {/* Orbit 5: Fast, Reverse, Purple */}
+                            <div className="absolute inset-14 animate-orbit-reverse-fast border border-accent-purple/10 rounded-full rotate-[160deg]">
+                                <div className="absolute bottom-1/2 -left-1 w-1.5 h-1.5 bg-accent-purple rounded-full"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Static Background Circle */}
-                    <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 288 288">
+                    <svg className="absolute inset-0 w-full h-full transform -rotate-90 z-10" viewBox="0 0 288 288">
                         <circle className="text-slate-200 dark:text-white/5" cx="144" cy="144" fill="transparent" r="130" stroke="currentColor" strokeWidth="8"></circle>
                         {/* Progress Foreground Circle */}
                         <circle

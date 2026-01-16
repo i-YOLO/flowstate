@@ -135,3 +135,40 @@
   - `App.tsx` 注册 Token 过期回调，检测到过期后自动跳转登录页面。
   - 所有前端 API 调用逐步迁移至 `apiFetch`，统一认证和错误处理逻辑。
 
+## [2026-01-16 21:50]
+### 🎨 UI/UX Pro Max 优化 (Visual & Interaction Enhancement)
+
+#### 1. 🎯 沉浸式专注计时器 (Embedded Focus Timer)
+- **无缝体验**: 点击"开始专注"不再跳转页面，直接在当前位置平滑切换为计时状态。
+- **分离式布局**:
+  - **顶部**: 仅保留模式切换器（倒计时/正计时）。
+  - **中部**: 巨大的纯净时间显示，专注于展示时间。
+  - **底部**: 悬浮控制栏，包含暂停/继续和结束按钮。
+- **功能增强**:
+  - 支持 **倒计时 (Pomodoro)** 和 **正计时 (Stopwatch)** 两种模式。
+  - 自由时长滑块，支持 1-120 分钟无级调节。
+- **视觉反馈**:
+  - **运行中**: 时间高亮，光环呼吸动画，粒子旋转。
+  - **暂停时**: 所有动画瞬间冻结，时间变暗，显示闪烁的"PAUSED"警示。
+
+#### 2. 🚀 转场与动画优化 (Transitions & Animations)
+- **Tab 切换**: 实现 Fade & Scale 平滑过渡效果。
+- **Pro Max 导航栏**: 底部导航栏采用滑动 Pill 高亮 + 微动效设计。
+- **Tailwind 扩展**: 新增自定义动画 (orbit, ripple, breathe, expand-full) 到 `tailwind.config.js`。
+
+#### 3. 💾 专注记录保存与同步 (Focus Session Persistence)
+- **自动保存**: 点击 END 按钮后，专注记录自动保存到数据库。
+- **时长校验**: 专注时长 < 1 分钟时弹出提示，不保存记录。
+- **Fire-and-Forget 模式**: UI 立即切换，API 调用在后台异步执行，消除 2 秒延迟。
+- **日历同步**: 保存成功后，日历视图自动刷新，新记录即时可见。
+
+#### 4. 🕐 时区处理 (Timezone Handling)
+- **后端配置**:
+  - `application.yml` 添加 Jackson 时区配置 (`Asia/Shanghai`)。
+  - `Dockerfile` 添加 JVM 时区参数 (`-Duser.timezone=Asia/Shanghai`)。
+- **统一 UTC+8**: 所有后端时间记录（包括 `@CreationTimestamp`、`@UpdateTimestamp`）均使用北京时间。
+- **前端适配**: 使用 `toLocalISOString()` 发送本地时间，确保前后端时间一致。
+
+#### 5. 🛠 工程化改进 (Engineering)
+- **`.gitignore` 更新**: 添加 `agent/` 目录到忽略列表。
+- **调试日志**: `handleFinish` 函数增加详细的彩色调试日志，便于排查问题。
