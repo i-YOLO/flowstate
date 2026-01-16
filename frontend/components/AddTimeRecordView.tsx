@@ -7,6 +7,7 @@ export interface TimeRecordData {
   endTime: string;   // HH:MM (24h)
   category?: string;
   notes?: string;
+  recordDate?: string; // YYYY-MM-DD
 }
 
 interface AddTimeRecordViewProps {
@@ -285,6 +286,10 @@ const AddTimeRecordView: React.FC<AddTimeRecordViewProps> = ({ onCancel, onSave,
   const [title, setTitle] = useState(initialData?.title || '');
   const [categories, setCategories] = useState<any[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
+  // 记录日期状态，默认为今天
+  const [recordDate, setRecordDate] = useState<string>(
+    initialData?.recordDate || new Date().toISOString().split('T')[0]
+  );
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -380,7 +385,8 @@ const AddTimeRecordView: React.FC<AddTimeRecordViewProps> = ({ onCancel, onSave,
         startTime: startTotal,
         duration: diff,
         category: selectedCategory,
-        color: currentCategory.color
+        color: currentCategory.color,
+        recordDate: recordDate
       };
 
       const url = initialData?.id
@@ -522,9 +528,22 @@ const AddTimeRecordView: React.FC<AddTimeRecordViewProps> = ({ onCancel, onSave,
                 </div>
                 <span className="text-slate-700 dark:text-slate-300 font-medium">开始时间</span>
               </div>
-              <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg pointer-events-none flex items-center gap-2">
-                <span className="text-slate-900 dark:text-white font-semibold">{formatTimeDisplay(startTime)}</span>
-                <span className="material-symbols-outlined text-slate-400 text-sm">edit</span>
+              <div className="flex items-center gap-2">
+                {/* 日期选择器 */}
+                <input
+                  type="date"
+                  value={recordDate}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setRecordDate(e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-lg text-slate-900 dark:text-white font-semibold text-sm border-none outline-none cursor-pointer"
+                />
+                <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg pointer-events-none flex items-center gap-2">
+                  <span className="text-slate-900 dark:text-white font-semibold">{formatTimeDisplay(startTime)}</span>
+                  <span className="material-symbols-outlined text-slate-400 text-sm">edit</span>
+                </div>
               </div>
             </div>
 
@@ -542,9 +561,19 @@ const AddTimeRecordView: React.FC<AddTimeRecordViewProps> = ({ onCancel, onSave,
                   {duration.isNextDay && <span className="ml-2 text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded font-bold">+1 天</span>}
                 </span>
               </div>
-              <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg pointer-events-none flex items-center gap-2">
-                <span className="text-slate-900 dark:text-white font-semibold">{formatTimeDisplay(endTime)}</span>
-                <span className="material-symbols-outlined text-slate-400 text-sm">edit</span>
+              <div className="flex items-center gap-2">
+                {/* 日期显示（只读，跟随开始日期或+1天） */}
+                <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 text-sm">
+                  {duration.isNextDay ? (() => {
+                    const d = new Date(recordDate);
+                    d.setDate(d.getDate() + 1);
+                    return d.toISOString().split('T')[0];
+                  })() : recordDate}
+                </span>
+                <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg pointer-events-none flex items-center gap-2">
+                  <span className="text-slate-900 dark:text-white font-semibold">{formatTimeDisplay(endTime)}</span>
+                  <span className="material-symbols-outlined text-slate-400 text-sm">edit</span>
+                </div>
               </div>
             </div>
 

@@ -17,18 +17,25 @@ import NotificationView from './components/NotificationView';
 import ChatView from './components/ChatView';
 import PublicProfileView from './components/PublicProfileView';
 import CategoryManagementView from './components/CategoryManagementView';
+import { setTokenExpiredCallback } from './utils/api';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>(View.LOGIN);
   const [editingRecord, setEditingRecord] = useState<TimeRecordData | null>(null);
 
-  // Auto-login check
+  // Auto-login check and register token expired callback
   React.useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       // Basic check, in reality we should verify token validity via API
       setCurrentView(View.CALENDAR);
     }
+
+    // Register callback to handle token expiration globally
+    setTokenExpiredCallback(() => {
+      console.log('%c[AUTH] Session expired. Redirecting to login...', 'color: #ef4444; font-weight: bold;');
+      setCurrentView(View.LOGIN);
+    });
   }, []);
 
   // Helper to render the active component

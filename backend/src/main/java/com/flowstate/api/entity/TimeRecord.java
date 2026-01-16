@@ -3,6 +3,7 @@ package com.flowstate.api.entity;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -34,6 +35,9 @@ public class TimeRecord {
 
     private String category;
     private String color;
+
+    @Column(nullable = false)
+    private LocalDate recordDate; // 记录所属日期
 
     @CreationTimestamp
     private LocalDateTime createdAt;
@@ -136,6 +140,14 @@ public class TimeRecord {
         this.createdAt = createdAt;
     }
 
+    public LocalDate getRecordDate() {
+        return recordDate;
+    }
+
+    public void setRecordDate(LocalDate recordDate) {
+        this.recordDate = recordDate;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -185,6 +197,11 @@ public class TimeRecord {
 
         public Builder color(String color) {
             record.setColor(color);
+            return this;
+        }
+
+        public Builder recordDate(LocalDate recordDate) {
+            record.setRecordDate(recordDate);
             return this;
         }
 

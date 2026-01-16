@@ -1,0 +1,11 @@
+                            <p className="mt-12 text-xs font-medium text-slate-400 dark:text-white/40 max-w-[200px] leading-relaxed">
+                                点击开始一个经典的番茄钟，<br />让时间流逝变得有意义
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+};
+
+export default CalendarView;

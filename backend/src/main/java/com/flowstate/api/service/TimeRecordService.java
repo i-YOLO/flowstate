@@ -11,6 +11,7 @@ import com.flowstate.api.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -36,6 +37,13 @@ public class TimeRecordService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<TimeRecordResponse> getRecordsForUserByDate(UUID userId, LocalDate date) {
+        return timeRecordRepository.findByUserIdAndRecordDate(userId, date).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public TimeRecordResponse createRecord(UUID userId, TimeRecordRequest request) {
         User user = userRepository.findById(userId)
@@ -47,6 +55,9 @@ public class TimeRecordService {
                     .orElse(null);
         }
 
+        // 如果未传递 recordDate，使用今天日期
+        LocalDate recordDate = request.getRecordDate() != null ? request.getRecordDate() : LocalDate.now();
+
         TimeRecord record = TimeRecord.builder()
                 .user(user)
                 .habit(habit)
@@ -56,6 +67,7 @@ public class TimeRecordService {
                 .duration(request.getDuration())
                 .category(request.getCategory())
                 .color(request.getColor())
+                .recordDate(recordDate)
                 .build();
 
         TimeRecord saved = timeRecordRepository.save(record);
