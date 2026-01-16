@@ -3,7 +3,7 @@ import { apiFetch, API_BASE_URL } from '../utils/api';
 
 interface CalendarViewProps {
     onOpenNewEntry?: () => void;
-    onStartFocus?: () => void;
+    onStartFocus?: (settings?: { mode: 'pomodoro' | 'stopwatch', duration: number }) => void;
     onCreateEvent?: (startTime: number) => void;
     onEditEvent?: (event: CalendarEvent) => void;
     onManageCategories?: () => void;
@@ -548,8 +548,258 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocu
     // Render Time Grid Lines
     const hours = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i);
 
+
+
+    // Timer State for Embedded Focus Mode
+    const [isActive, setIsActive] = useState(false); // Controls View: Setup vs Session
+    const [isPaused, setIsPaused] = useState(false); // Controls Timer Ticking
+    const [timerMode, setTimerMode] = useState<'pomodoro' | 'stopwatch'>('pomodoro');
+    const [duration, setDuration] = useState(25);
+    // For Stopwatch: timeLeft represents elapsed time
+    // For Pomodoro: timeLeft represents remaining time
+    const [timeLeft, setTimeLeft] = useState(25 * 60);
+    const [isFinished, setIsFinished] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    
+    // Toast State
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'info' | 'success' | 'error'>('info');
+
+    const triggerToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+        setToastMessage(message);
+        setToastType(type);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+    };
+    
+    // Config
+    const startTimeRef = useRef<number | null>(null);
+    const expectedEndTimeRef = useRef<number | null>(null);
+    const pauseStartTimeRef = useRef<number | null>(null); // To track pause duration
+    const totalPausedDurationRef = useRef<number>(0); // Accumulated pause time
+
+    // Reset timer when Duration or Mode changes (only if not active)
+    useEffect(() => {
+        if (!isActive) {
+            setTimeLeft(timerMode === 'stopwatch' ? 0 : duration * 60);
+            totalPausedDurationRef.current = 0; // Reset paused duration
+        }
+    }, [duration, timerMode, isActive]);
+
+    // Timer Interval Logic
+    useEffect(() => {
+        let interval: number;
+
+        if (isActive && !isPaused) {
+            if (!startTimeRef.current) {
+                // Initial Start
+                startTimeRef.current = Date.now();
+            }
+
+            // Set the expected absolute end time when starting/resuming for Pomodoro
+            if (timerMode === 'pomodoro' && !expectedEndTimeRef.current) {
+                expectedEndTimeRef.current = Date.now() + timeLeft * 1000;
+            }
+
+            interval = window.setInterval(() => {
+                const now = Date.now();
+
+                if (timerMode === 'stopwatch') {
+                    // Stopwatch: Count Up based on start time (minus paused time)
+                    if (startTimeRef.current) {
+                        const elapsed = Math.floor((now - startTimeRef.current - totalPausedDurationRef.current) / 1000);
+                        setTimeLeft(elapsed); 
+                    }
+                } else {
+                    // Pomodoro: Count Down
+                    if (expectedEndTimeRef.current) {
+                        const remaining = Math.max(0, Math.round((expectedEndTimeRef.current - now) / 1000));
+                        if (remaining <= 0) {
+                            setTimeLeft(0);
+                            handleFinish(true);
+                        } else {
+                            setTimeLeft(remaining);
+                        }
+                    }
+                }
+            }, 1000); // 1s interval is fine for display
+        } else if (isPaused) {
+            // clear interval implicitly by cleanup
+            // Adjust refs on pause start is handled in toggleTimer
+        } else {
+            // Not Active
+            startTimeRef.current = null;
+            expectedEndTimeRef.current = null;
+        }
+
+        return () => clearInterval(interval);
+    }, [isActive, isPaused, timerMode]); // Removed timeLeft dependency to avoid drift loop
+
+    const toggleTimer = () => {
+        if (!isActive) return;
+
+        if (isPaused) {
+            // RESUME
+            const now = Date.now();
+            const pauseDuration = pauseStartTimeRef.current ? (now - pauseStartTimeRef.current) : 0;
+            totalPausedDurationRef.current += pauseDuration; // Accumulate pause time
+            
+            if (timerMode === 'stopwatch') {
+                 // For stopwatch, we already adjusted with totalPausedDuration
+            } else {
+                 if (expectedEndTimeRef.current) expectedEndTimeRef.current += pauseDuration;
+            }
+            pauseStartTimeRef.current = null;
+            setIsPaused(false);
+        } else {
+            // PAUSE
+            pauseStartTimeRef.current = Date.now();
+            setIsPaused(true);
+        }
+    };
+
+    const handleFinish = async (isAuto: boolean = false) => {
+        console.log('%c[DEBUG] handleFinish called', 'color: #ff6b6b; font-weight: bold;', { isAuto, isFinished, isSaving });
+        
+        if (isFinished || isSaving) {
+            console.log('%c[DEBUG] Early return: isFinished or isSaving', 'color: #ff6b6b;', { isFinished, isSaving });
+            return;
+        }
+
+        // Calculate actual focus duration in seconds
+        let focusDurationSeconds: number;
+        if (timerMode === 'pomodoro') {
+            // For Pomodoro: focused time = total duration - remaining time
+            focusDurationSeconds = (duration * 60) - timeLeft;
+        } else {
+            // For Stopwatch: focused time = elapsed time (already accounts for pauses)
+            focusDurationSeconds = timeLeft;
+        }
+
+        const focusDurationMinutes = Math.floor(focusDurationSeconds / 60);
+        
+        console.log('%c[DEBUG] Duration calculation', 'color: #00f2ff; font-weight: bold;', { 
+            timerMode, 
+            duration, 
+            timeLeft, 
+            focusDurationSeconds, 
+            focusDurationMinutes 
+        });
+
+        // Capture refs before resetting
+        const capturedStartTime = startTimeRef.current;
+
+        // IMMEDIATELY reset UI - don't wait for API
+        setIsActive(false);
+        setIsPaused(false);
+        setTimeLeft(timerMode === 'stopwatch' ? 0 : duration * 60);
+        totalPausedDurationRef.current = 0;
+        startTimeRef.current = null;
+        expectedEndTimeRef.current = null;
+
+        // Check minimum duration
+        if (focusDurationMinutes < 1) {
+            console.log('%c[DEBUG] Duration < 1 min, not saving', 'color: #ffa500;');
+            triggerToast('专注时长不足 1 分钟，本次记录将不予保存。', 'info');
+            return;
+        }
+
+        // Proceed to save in background (fire-and-forget pattern)
+        console.log('%c[DEBUG] Proceeding to save in background...', 'color: #10b981; font-weight: bold;');
+        
+        const endTime = new Date();
+        const startTime = capturedStartTime ? new Date(capturedStartTime) : new Date(Date.now() - focusDurationSeconds * 1000);
+
+        // Helper to format local time as ISO string WITHOUT timezone (for Java LocalDateTime)
+        const toLocalISOString = (date: Date) => {
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            const pad3 = (n: number) => n.toString().padStart(3, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad3(date.getMilliseconds())}`;
+        };
+
+        // Fire-and-forget API call
+        (async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const requestBody = {
+                    startTime: toLocalISOString(startTime),
+                    endTime: toLocalISOString(endTime),
+                    duration: focusDurationMinutes,
+                    habitId: null,
+                    categoryId: null,
+                    status: isAuto ? 'COMPLETED' : 'STOPPED'
+                };
+
+                console.log('%c[DEBUG] Sending POST request to /api/focus/sessions', 'color: #10b981;', { 
+                    url: `${API_BASE_URL}/api/focus/sessions`,
+                    body: requestBody 
+                });
+                
+                const response = await fetch(`${API_BASE_URL}/api/focus/sessions`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                console.log('%c[DEBUG] Response received', 'color: #10b981;', { status: response.status, ok: response.ok });
+
+                if (response.ok) {
+                    triggerToast(`专注 ${focusDurationMinutes} 分钟已保存！`, 'success');
+                    // Refresh calendar events to show the new focus session
+                    fetchEvents(selectedDate);
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('Failed to save focus session:', errorData);
+                    triggerToast('保存失败，请稍后重试', 'error');
+                }
+            } catch (err) {
+                console.error('Failed to save focus session:', err);
+                triggerToast('保存失败，请检查网络连接', 'error');
+            }
+        })();
+    };
+
+
+
+
+    const handleFocusClick = () => {
+        // Start the timer directly
+        setIsActive(true);
+    };
+
+    const formatTimerDisplay = (seconds: number) => {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    };
+
+    const [isExpanding, setIsExpanding] = useState(false); // Kept for legacy prop compat if needed, but unused now
+    
     return (
-        <div className="flex flex-col h-full bg-background-light dark:bg-background-dark overflow-hidden">
+        <div className="flex flex-col h-full bg-background-dark relative overflow-hidden">
+            
+            {/* Toast Notification */}
+            <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] transition-all duration-500 ease-out-expo ${showToast ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0 pointer-events-none'}`}>
+                <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl backdrop-blur-xl border shadow-2xl ${
+                    toastType === 'success' ? 'bg-emerald-500/20 border-emerald-500/30' :
+                    toastType === 'error' ? 'bg-red-500/20 border-red-500/30' :
+                    'bg-slate-900/90 dark:bg-white/10 border-white/10'
+                }`}>
+                    <span className={`material-symbols-outlined text-xl ${
+                        toastType === 'success' ? 'text-emerald-400' :
+                        toastType === 'error' ? 'text-red-400' :
+                        'text-amber-400'
+                    }`}>
+                        {toastType === 'success' ? 'check_circle' : toastType === 'error' ? 'error' : 'info'}
+                    </span>
+                    <p className="text-sm font-bold text-white whitespace-nowrap">{toastMessage}</p>
+                </div>
+            </div>
+            
             {/* Fixed Header: Top Bar + Week Strip + Start Focus Button */}
             <div className="shrink-0 z-20 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
                 {/* Top Nav Row */}
@@ -625,180 +875,363 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewEntry, onStartFocu
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto overflow-x-hidden pb-32" ref={timelineRef} style={{ touchAction: draggingId ? 'none' : 'auto' }}>
-                {activeTab === 'calendar' ? (
-                    <div
-                        className="relative w-full border-t border-slate-100 dark:border-slate-800/50"
-                        style={{ height: (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MIN + 100 }}
-                        onClick={handleTimelineClick}
-                        onPointerDown={() => { hasDraggedRef.current = false; }}
-                    >
-                        {/* Background Grid */}
-                        {hours.map((hour) => (
-                            <div
-                                key={hour}
-                                className="absolute w-full flex items-center group pointer-events-none"
-                                style={{ top: (hour - START_HOUR) * 60 * PIXELS_PER_MIN }}
-                            >
-                                <div className="w-16 text-right pr-4 text-[10px] font-bold text-slate-400 dark:text-slate-600 -translate-y-1/2">
-                                    {hour}:00
-                                </div>
-                                <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800"></div>
-                            </div>
-                        ))}
-
-                        {/* Current Time Line */}
+            {/* Stacked Container Wrapper for Fade & Scale Transition */}
+            <div className="flex-1 overflow-hidden relative w-full h-full bg-background-light dark:bg-background-dark">
+                
+                {/* PANEL 1: CALENDAR */}
+                <div 
+                    className={`absolute inset-0 w-full h-full transition-all duration-500 ease-out-expo ${
+                        activeTab === 'calendar' 
+                        ? 'opacity-100 scale-100 z-10 pointer-events-auto' 
+                        : 'opacity-0 scale-95 z-0 pointer-events-none'
+                    }`}
+                >
+                    <div className="w-full h-full overflow-y-auto overflow-x-hidden pb-32" ref={timelineRef} style={{ touchAction: draggingId ? 'none' : 'auto' }}>
                         <div
-                            className="absolute w-full flex items-center z-10 pointer-events-none"
-                            style={{ top: (currentTotalMinutes - (START_HOUR * 60)) * PIXELS_PER_MIN }}
+                            className="relative w-full border-t border-slate-100 dark:border-slate-800/50"
+                            style={{ height: (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MIN + 100 }}
+                            onClick={handleTimelineClick}
+                            onPointerDown={() => { hasDraggedRef.current = false; }}
                         >
-                            <div className="w-16"></div>
-                            <div className="relative flex-1">
-                                <div className="absolute -left-[5px] top-[-5px] size-2.5 rounded-full bg-primary shadow-glow"></div>
-                                <div className="h-[2px] w-full bg-primary"></div>
-                                <span className="absolute left-2 -top-6 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg">
-                                    {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
-                                </span>
+                            {/* Background Grid */}
+                            {hours.map((hour) => (
+                                <div
+                                    key={hour}
+                                    className="absolute w-full flex items-center group pointer-events-none"
+                                    style={{ top: (hour - START_HOUR) * 60 * PIXELS_PER_MIN }}
+                                >
+                                    <div className="w-16 text-right pr-4 text-[10px] font-bold text-slate-400 dark:text-slate-600 -translate-y-1/2">
+                                        {hour}:00
+                                    </div>
+                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800"></div>
+                                </div>
+                            ))}
+
+                            {/* Current Time Line */}
+                            <div
+                                className="absolute w-full flex items-center z-10 pointer-events-none"
+                                style={{ top: (currentTotalMinutes - (START_HOUR * 60)) * PIXELS_PER_MIN }}
+                            >
+                                <div className="w-16"></div>
+                                <div className="relative flex-1">
+                                    <div className="absolute -left-[5px] top-[-5px] size-2.5 rounded-full bg-primary shadow-glow"></div>
+                                    <div className="h-[2px] w-full bg-primary"></div>
+                                    <span className="absolute left-2 -top-6 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-lg">
+                                        {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Events Wrapper */}
-                        <div className="absolute inset-0 left-16 right-4 pointer-events-none">
-                            {events.map((ev) => {
-                                const top = (ev.startTime - (START_HOUR * 60)) * PIXELS_PER_MIN;
-                                const height = ev.duration * PIXELS_PER_MIN;
-                                const styles = getEventColor(ev.color);
-                                const isDraggingThis = draggingId === ev.id;
-                                const layout = eventLayouts[ev.id] || { width: '100%', left: '0%' };
+                            {/* Events Wrapper */}
+                            <div className="absolute inset-0 left-16 right-4 pointer-events-none">
+                                {events.map((ev) => {
+                                    const top = (ev.startTime - (START_HOUR * 60)) * PIXELS_PER_MIN;
+                                    const height = ev.duration * PIXELS_PER_MIN;
+                                    const styles = getEventColor(ev.color);
+                                    const isDraggingThis = draggingId === ev.id;
+                                    const layout = eventLayouts[ev.id] || { width: '100%', left: '0%' };
 
-                                return (
-                                    <div
-                                        key={ev.id}
-                                        className={`absolute transition-all pointer-events-auto ${isDraggingThis ? 'z-50 scale-[1.02] opacity-90' : 'z-10'}`}
-                                        style={{
-                                            top: `${top}px`,
-                                            height: `${height}px`,
-                                            width: layout.width,
-                                            left: layout.left,
-                                            transform: isDraggingThis ? `translateX(${dragX}px)` : undefined,
-                                        }}
-                                        onClick={(e) => handleClick(e, ev)}
-                                    >
-                                        {/* Card Body */}
+                                    return (
                                         <div
-                                            className={`relative w-full h-full rounded-xl border-l-4 overflow-hidden select-none touch-none ${styles.bg} ${styles.border}`}
-                                            onPointerDown={(e) => handlePointerDown(e, ev, 'move')}
+                                            key={ev.id}
+                                            className={`absolute transition-all pointer-events-auto ${isDraggingThis ? 'z-50 scale-[1.02] opacity-90' : 'z-10'}`}
+                                            style={{
+                                                top: `${top}px`,
+                                                height: `${height}px`,
+                                                width: layout.width,
+                                                left: layout.left,
+                                                transform: isDraggingThis ? `translateX(${dragX}px)` : undefined,
+                                            }}
+                                            onClick={(e) => handleClick(e, ev)}
                                         >
-                                            {/* Top Resize Handle */}
+                                            {/* Card Body */}
                                             <div
-                                                className="absolute top-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20"
-                                                onPointerDown={(e) => handlePointerDown(e, ev, 'resize-top')}
+                                                className={`relative w-full h-full rounded-xl border-l-4 overflow-hidden select-none touch-none ${styles.bg} ${styles.border}`}
+                                                onPointerDown={(e) => handlePointerDown(e, ev, 'move')}
                                             >
-                                                <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mt-1"></div>
-                                            </div>
-
-                                            {/* Content */}
-                                            <div className="p-3 pt-4 h-full flex flex-col justify-center">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <div className="flex flex-col min-w-0">
-                                                        {/* Time Label */}
-                                                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-tight mb-0.5 block">
-                                                            {formatTime(ev.startTime)}
-                                                        </span>
-                                                        <h4 className={`text-sm font-bold leading-tight truncate ${styles.text}`}>{ev.title}</h4>
-                                                    </div>
-                                                    {ev.avatars && (
-                                                        <div className="flex -space-x-2 shrink-0">
-                                                            {ev.avatars.map((av, i) => (
-                                                                <div key={i} className="size-5 rounded-full border-2 border-background-dark bg-cover" style={{ backgroundImage: `url('${av}')` }}></div>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                {/* Top Resize Handle */}
+                                                <div
+                                                    className="absolute top-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20"
+                                                    onPointerDown={(e) => handlePointerDown(e, ev, 'resize-top')}
+                                                >
+                                                    <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mt-1"></div>
                                                 </div>
-                                                <p className={`mt-0.5 text-[10px] font-medium truncate ${styles.sub}`}>
-                                                    {ev.subtitle} • {Math.round(ev.duration)} 分钟
-                                                </p>
-                                            </div>
 
-                                            {/* Bottom Resize Handle */}
-                                            <div
-                                                className="absolute bottom-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20 flex items-end"
-                                                onPointerDown={(e) => handlePointerDown(e, ev, 'resize-bottom')}
-                                            >
-                                                <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mb-1"></div>
+                                                {/* Content */}
+                                                <div className="p-3 pt-4 h-full flex flex-col justify-center">
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <div className="flex flex-col min-w-0">
+                                                            {/* Time Label */}
+                                                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-tight mb-0.5 block">
+                                                                {formatTime(ev.startTime)}
+                                                            </span>
+                                                            <h4 className={`text-sm font-bold leading-tight truncate ${styles.text}`}>{ev.title}</h4>
+                                                        </div>
+                                                        {ev.avatars && (
+                                                            <div className="flex -space-x-2 shrink-0">
+                                                                {ev.avatars.map((av, i) => (
+                                                                    <div key={i} className="size-5 rounded-full border-2 border-background-dark bg-cover" style={{ backgroundImage: `url('${av}')` }}></div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <p className={`mt-0.5 text-[10px] font-medium truncate ${styles.sub}`}>
+                                                        {ev.subtitle} • {Math.round(ev.duration)} 分钟
+                                                    </p>
+                                                </div>
+
+                                                {/* Bottom Resize Handle */}
+                                                <div
+                                                    className="absolute bottom-0 left-0 right-0 h-4 w-full cursor-ns-resize z-20 hover:bg-white/10 active:bg-white/20 flex items-end"
+                                                    onPointerDown={(e) => handlePointerDown(e, ev, 'resize-bottom')}
+                                                >
+                                                    <div className="mx-auto w-8 h-1 bg-slate-400/20 rounded-full mb-1"></div>
+                                                </div>
                                             </div>
                                         </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* PANEL 2: FOCUS TAB */}
+                <div 
+                    className={`absolute inset-0 w-full h-full transition-all duration-500 ease-out-expo ${
+                        activeTab === 'focus' 
+                        ? 'opacity-100 scale-100 z-10 pointer-events-auto' 
+                        : 'opacity-0 scale-95 z-0 pointer-events-none'
+                    }`}
+                >
+
+                    <div className="w-full h-full flex flex-col">
+
+                        {/* Top Control Bar: Mode Switch Only */}
+                        <div className="flex-none px-6 pt-6 pb-2 flex items-center justify-center z-10">
+                            {/* Timer Mode Selector (Centered) */}
+                            <div className={`flex items-center gap-1 p-1 bg-slate-200/50 dark:bg-white/5 rounded-full border border-slate-300 dark:border-white/10 backdrop-blur-md transition-all duration-500 ${isActive ? 'opacity-0 pointer-events-none scale-95' : 'opacity-100 scale-100'}`}>
+                                <button
+                                    onClick={() => setTimerMode('pomodoro')}
+                                    className={`relative px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${
+                                        timerMode === 'pomodoro' 
+                                        ? 'text-slate-900 dark:text-primary shadow-sm bg-white dark:bg-white/10' 
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    倒计时
+                                    {timerMode === 'pomodoro' && (
+                                        <div className="absolute inset-0 rounded-full shadow-[0_0_10px_rgba(0,242,255,0.2)]"></div>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => setTimerMode('stopwatch')}
+                                    className={`relative px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${
+                                        timerMode === 'stopwatch' 
+                                        ? 'text-slate-900 dark:text-primary shadow-sm bg-white dark:bg-white/10' 
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    正计时
+                                    {timerMode === 'stopwatch' && (
+                                        <div className="absolute inset-0 rounded-full shadow-[0_0_10px_rgba(0,242,255,0.2)]"></div>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+
+
+
+                        {/* Middle: Focus Hub (Center Stage) */}
+                        <div className="flex-1 flex flex-col items-center justify-center relative -mt-8">
+                             {/* SPACER for visual balance */}
+                             {isActive && <div className="h-8 transition-all"></div>}
+
+
+                            {/* Focus Hub Center - UI/UX Pro Max Edition */}
+                            {/* Resized: Enlarge by ~40% (size-56 -> size-80) as requested */}
+                            <div className="relative size-80 flex items-center justify-center">
+                                {/* LAYER 1: Deep Ambient Glow */}
+                                <div className="absolute inset-0 z-0 pointer-events-none">
+                                    <div className={`absolute inset-0 rounded-full bg-primary/20 blur-[80px] duration-1000 ${isActive && !isPaused ? 'animate-pulse scale-125' : 'scale-100'}`}></div>
+                                </div>
+
+                                {/* LAYER 2: Expanding Ripples */}
+                                <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
+                                    <div className={`absolute size-full rounded-full border border-primary/20 ${isActive && !isPaused ? 'animate-ripple-1' : ''}`}></div>
+                                    <div className={`absolute size-full rounded-full border border-primary/10 ${isActive && !isPaused ? 'animate-ripple-2' : ''}`}></div>
+                                    <div className={`absolute size-full rounded-full border border-primary/5 ${isActive && !isPaused ? 'animate-ripple-3' : ''}`}></div>
+                                </div>
+
+                                {/* LAYER 3: Orbital Particles (Scaled for size-80) */}
+                                <div className={`absolute inset-[-60px] z-0 pointer-events-none ${isActive ? 'opacity-100' : 'opacity-40'}`}>
+                                    {/* Orbit 1: Fast, Inner, White */}
+                                    <div className={`absolute inset-16 border border-dashed border-primary/10 rounded-full opacity-40 ${isActive && !isPaused ? 'animate-orbit-fast' : 'animate-none'}`}>
+                                        <div className="absolute top-1/2 -right-1 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_white]"></div>
                                     </div>
-                                );
-                            })}
+
+                                    {/* Orbit 2: Medium, Cyan */}
+                                    <div className={`absolute inset-8 border border-primary/10 rounded-full ${isActive && !isPaused ? 'animate-orbit-normal' : 'animate-none'}`}>
+                                        <div className="absolute -top-1 left-1/2 w-2 h-2 bg-primary rounded-full shadow-[0_0_10px_rgba(0,242,255,1)]"></div>
+                                    </div>
+                                    
+                                    {/* Orbit 3: Slow, Outer, Purple */}
+                                    <div className={`absolute inset-0 border border-accent-purple/10 rounded-full ${isActive && !isPaused ? 'animate-orbit-reverse-slow' : 'animate-none'}`}>
+                                        <div className="absolute bottom-1/2 -left-1 w-2.5 h-2.5 bg-accent-purple rounded-full shadow-[0_0_12px_rgba(188,19,254,0.8)]"></div>
+                                    </div>
+                                </div>
+
+
+                                {/* Precise Action Button / Timer Display */}
+                                <button
+                                    className={`relative z-50 rounded-full bg-background-light dark:bg-card-dark border-[6px] transition-all duration-300 overflow-hidden group ${
+                                        isActive 
+                                        ? `size-60 border-primary/50 cursor-default ${isPaused ? 'shadow-[0_0_20px_rgba(255,100,100,0.2)] border-slate-500/50' : 'shadow-[0_0_50px_-10px_rgba(0,242,255,0.4)]'}` 
+                                        : 'size-40 border-primary/20 active:scale-95 cursor-pointer shadow-[0_0_50px_-10px_rgba(0,242,255,0.4)]'
+                                    }`}
+                                    onClick={(e) => {
+                                        // Only handle start click. Active state clicks are disabled on the hub itself.
+                                        if (!isActive) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleFocusClick();
+                                        }
+                                    }}
+                                >
+                                    {/* Inner Gradient Shine */}
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-primary/0 via-primary/5 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                                    <div className="relative flex items-center justify-center w-full h-full z-10 transition-all duration-500">
+                                        {isActive ? (
+                                             <div className="flex flex-col items-center justify-center animate-in zoom-in duration-300 relative">
+                                                 {/* Clean Time Display */}
+                                                 <span className={`text-6xl font-black tabular-nums tracking-tighter drop-shadow-lg transition-colors duration-300 ${isPaused ? 'text-slate-500 dark:text-slate-400 opacity-60' : 'text-slate-900 dark:text-white'}`}>
+                                                     {formatTimerDisplay(timeLeft)}
+                                                 </span>
+                                                 {/* Label: Shows PAUSED when paused */}
+                                                 <span className={`text-xs font-bold tracking-[0.2em] mt-2 transition-all duration-300 ${isPaused ? 'text-amber-500 animate-pulse' : 'text-slate-400 dark:text-slate-500 opacity-80'}`}>
+                                                     {isPaused ? 'PAUSED' : (timerMode === 'pomodoro' ? 'REMAINING' : 'FOCUS TIME')}
+                                                 </span>
+                                             </div>
+                                        ) : (
+                                            /* Custom Play/Focus Icon */
+                                            <div className="relative flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="drop-shadow-[0_0_20px_rgba(0,242,255,0.6)]">
+                                                    <path d="M8 5.14v13.72a1.14 1.14 0 0 0 1.76.96l10.97-6.86a1.14 1.14 0 0 0 0-1.92L9.76 4.18A1.14 1.14 0 0 0 8 5.14z" fill="currentColor" className="text-primary"/>
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Tech Ring Overlay */}
+                                    <svg className={`absolute inset-0 rotate-[-90deg] opacity-40 group-hover:opacity-60 transition-opacity duration-500 ${!isPaused && isActive ? 'animate-spin-slow' : ''}`} viewBox="0 0 100 100">
+                                        <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="1" className="text-primary" strokeDasharray="4 4" />
+                                        <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-white/50" />
+                                    </svg>
+                                </button>
+
+                            </div>
+
+
+                        </div>
+
+
+
+                        {/* Bottom: Custom Duration Slider OR Controls (Fixed at bottom) */}
+                         <div className="flex-none pb-28 px-8 h-40 flex flex-col justify-center items-center relative z-20">
+                             {isActive && (
+                                <div className="flex items-center gap-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                                    {/* Control 1: Pause/Resume */}
+                                    <button 
+                                        onClick={toggleTimer}
+                                        className="size-16 rounded-full bg-slate-200/50 dark:bg-white/10 backdrop-blur-md border border-slate-300/50 dark:border-white/10 flex items-center justify-center text-slate-900 dark:text-white hover:bg-white/20 hover:scale-105 transition-all shadow-lg group"
+                                        title="Pause/Resume"
+                                    >
+                                         <span className="material-symbols-outlined text-3xl group-active:scale-90 transition-transform">
+                                             {isPaused ? 'play_arrow' : 'pause'}
+                                         </span>
+                                    </button>
+                                    
+                                    {/* Control 2: End Session */}
+                                    <button 
+                                        onClick={() => handleFinish(false)}
+                                        disabled={isSaving || isFinished}
+                                        className={`h-16 px-10 rounded-full backdrop-blur-md flex items-center justify-center gap-2 font-bold text-sm tracking-widest transition-all shadow-lg group ${
+                                            isSaving || isFinished 
+                                            ? 'bg-slate-500/20 border border-slate-500/30 text-slate-400 cursor-not-allowed' 
+                                            : 'bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-500 hover:scale-105'
+                                        }`}
+                                        title="End Session"
+                                    >
+                                        {isSaving ? (
+                                            <>
+                                                <span className="material-symbols-outlined text-2xl animate-spin">progress_activity</span>
+                                                <span>SAVING...</span>
+                                            </>
+                                        ) : isFinished ? (
+                                            <>
+                                                <span className="material-symbols-outlined text-2xl text-emerald-400">check_circle</span>
+                                                <span className="text-emerald-400">SAVED</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-symbols-outlined text-2xl group-active:scale-90 transition-transform">stop</span>
+                                                <span>END</span>
+                                            </>
+                                        )}
+                                    </button>
+
+                                </div>
+                             )}
+
+                            {timerMode === 'pomodoro' && !isActive && (
+                                <div className="flex flex-col items-center w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                     {/* Value Display */}
+                                    <div className="flex items-baseline gap-1 mb-3">
+                                        <span className="text-4xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter drop-shadow-lg">{duration}</span>
+                                        <span className="text-[10px] font-bold text-primary uppercase tracking-widest">MIN</span>
+                                    </div>
+                                    
+                                    {/* Custom Styled Slider */}
+                                    <div className="relative w-full max-w-xs h-8 flex items-center justify-center group">
+                                        {/* Track */}
+                                        <div className="absolute w-full h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                                            {/* Progress Fill */}
+                                            <div 
+                                                className="h-full bg-primary transition-all duration-75 ease-out"
+                                                style={{ width: `${(duration / 120) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                        
+                                        {/* Native Input (Invisible but interactive) */}
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="120"
+                                            step="1"
+                                            value={duration}
+                                            onChange={(e) => setDuration(parseInt(e.target.value))}
+                                            className="absolute w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+
+                                        {/* Custom Thumb (Visual Only - follows progress) */}
+                                        <div 
+                                            className="absolute size-4 bg-white border-2 border-primary rounded-full shadow-[0_0_10px_rgba(0,242,255,0.5)] pointer-events-none transition-all duration-75 ease-out group-hover:scale-125"
+                                            style={{ left: `calc(${(duration / 120) * 100}% - 8px)` }}
+                                        ></div>
+                                    </div>
+                                    
+                                    {/* Labels */}
+                                    <div className="flex justify-between w-full max-w-xs mt-1 px-1">
+                                         <span className="text-[10px] text-slate-400 font-bold">1m</span>
+                                         <span className="text-[10px] text-slate-400 font-bold">120m</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-                ) : (
-                    /* Focus Tab Content */
-                    <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in-95 duration-500">
-                        {/* Summary Header */}
-                        <div className="mb-12">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-2 block">Focus Hub • 专注中心</span>
-                            <h3 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">保持专注，<br />成就伟大。</h3>
-                            <div className="flex items-center justify-center gap-4 mt-6">
-                                <div className="px-4 py-2 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5">
-                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">今日专注</span>
-                                    <span className="text-lg font-bold text-slate-900 dark:text-white">{focusStats.totalMinutes} <span className="text-xs font-medium opacity-50">分钟</span></span>
-                                </div>
-                                <div className="px-4 py-2 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5">
-                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">完成组数</span>
-                                    <span className="text-lg font-bold text-slate-900 dark:text-white">{focusStats.completedSessions} <span className="text-xs font-medium opacity-50">组</span></span>
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Focus Hub Center - Precise Interaction Zone with Geometric Validation */}
-                        <div className="relative size-80 flex items-center justify-center">
-                            {/* Decorative Background - Non-interactive */}
-                            <div className="absolute inset-0 z-0 pointer-events-none">
-                                <div className="absolute inset-0 rounded-full bg-primary/20 blur-3xl animate-pulse"></div>
-                                <div className="absolute inset-[-20px] rounded-full border border-primary/10 animate-ping [animation-duration:3s]"></div>
-                                <div className="absolute inset-[-40px] rounded-full border border-primary/5 animate-ping [animation-duration:4s]"></div>
-                            </div>
-
-                            {/* Precise Action Button - Uses geometric validation for click accuracy */}
-                            <button
-                                className="relative z-50 size-48 rounded-full bg-white dark:bg-card-dark border-4 border-primary flex flex-col items-center justify-center shadow-glow-lg active:scale-95 transition-all cursor-pointer overflow-hidden p-0 m-0"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-
-                                    // Geometric validation: only trigger if click is inside the circular button
-                                    const button = e.currentTarget;
-                                    const rect = button.getBoundingClientRect();
-                                    const centerX = rect.left + rect.width / 2;
-                                    const centerY = rect.top + rect.height / 2;
-                                    const radius = rect.width / 2;
-
-                                    const clickX = e.clientX;
-                                    const clickY = e.clientY;
-                                    const distance = Math.sqrt(Math.pow(clickX - centerX, 2) + Math.pow(clickY - centerY, 2));
-
-                                    if (distance <= radius) {
-                                        console.log('%c[DEBUG] Focus Hub: Precise Click Triggered.', 'color: #10b981; font-weight: bold;');
-                                        onStartFocus?.();
-                                    } else {
-                                        console.log('%c[DEBUG] Focus Hub: Click outside button radius, ignored.', 'color: #f59e0b;');
-                                    }
-                                }}
-                            >
-                                <div className="flex flex-col items-center justify-center w-full h-full hover:bg-primary/5 transition-colors">
-                                    <span className="material-symbols-outlined text-5xl text-primary filled mb-2">timer</span>
-                                    <span className="text-sm font-black text-slate-900 dark:text-white tracking-widest uppercase">开始专注</span>
-                                </div>
-                            </button>
-                        </div>
-
-                        <p className="mt-12 text-xs font-medium text-slate-400 dark:text-white/40 max-w-[200px] leading-relaxed">
-                            点击开始一个经典的番茄钟，<br />让时间流逝变得有意义
-                        </p>
-                    </div>
-                )}
+                </div>
             </div>
         </div>
     );
