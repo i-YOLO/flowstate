@@ -1,5 +1,6 @@
 package com.flowstate.api.dto;
 
+import com.flowstate.api.enums.Frequency;
 import com.flowstate.api.enums.GoalType;
 import java.util.UUID;
 
@@ -8,28 +9,34 @@ public class HabitResponse {
     private String name;
     private String category;
     private GoalType goalType;
+    private Frequency frequency;
     private Integer goalValue;
     private String unit;
     private String icon;
     private String color;
     private Integer currentValue;
     private Boolean isCompleted;
+    private Integer currentStreak;
+    private java.util.List<Boolean> lastSevenDays;
 
     public HabitResponse() {
     }
 
-    public HabitResponse(UUID id, String name, String category, GoalType goalType, Integer goalValue, String unit,
-            String icon, String color, Integer currentValue, Boolean isCompleted) {
+    public HabitResponse(UUID id, String name, String category, GoalType goalType, Frequency frequency, Integer goalValue, String unit,
+            String icon, String color, Integer currentValue, Boolean isCompleted, Integer currentStreak, java.util.List<Boolean> lastSevenDays) {
         this.id = id;
         this.name = name;
         this.category = category;
         this.goalType = goalType;
+        this.frequency = frequency;
         this.goalValue = goalValue;
         this.unit = unit;
         this.icon = icon;
         this.color = color;
         this.currentValue = currentValue;
         this.isCompleted = isCompleted;
+        this.currentStreak = currentStreak;
+        this.lastSevenDays = lastSevenDays;
     }
 
     // Getters and Setters
@@ -63,6 +70,14 @@ public class HabitResponse {
 
     public void setGoalType(GoalType goalType) {
         this.goalType = goalType;
+    }
+
+    public Frequency getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(Frequency frequency) {
+        this.frequency = frequency;
     }
 
     public Integer getGoalValue() {
@@ -113,6 +128,22 @@ public class HabitResponse {
         this.isCompleted = isCompleted;
     }
 
+    public Integer getCurrentStreak() {
+        return currentStreak;
+    }
+
+    public void setCurrentStreak(Integer currentStreak) {
+        this.currentStreak = currentStreak;
+    }
+
+    public java.util.List<Boolean> getLastSevenDays() {
+        return lastSevenDays;
+    }
+
+    public void setLastSevenDays(java.util.List<Boolean> lastSevenDays) {
+        this.lastSevenDays = lastSevenDays;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -137,6 +168,11 @@ public class HabitResponse {
 
         public Builder goalType(GoalType goalType) {
             response.setGoalType(goalType);
+            return this;
+        }
+
+        public Builder frequency(Frequency frequency) {
+            response.setFrequency(frequency);
             return this;
         }
 
@@ -167,6 +203,16 @@ public class HabitResponse {
 
         public Builder isCompleted(Boolean isCompleted) {
             response.setIsCompleted(isCompleted);
+            return this;
+        }
+
+        public Builder currentStreak(Integer currentStreak) {
+            response.setCurrentStreak(currentStreak);
+            return this;
+        }
+
+        public Builder lastSevenDays(java.util.List<Boolean> lastSevenDays) {
+            response.setLastSevenDays(lastSevenDays);
             return this;
         }
 

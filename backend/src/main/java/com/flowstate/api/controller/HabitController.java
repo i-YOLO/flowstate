@@ -7,8 +7,10 @@ import com.flowstate.api.service.HabitService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 
 @RestController
 @RequestMapping("/api/habits")
@@ -22,9 +24,12 @@ public class HabitController {
     }
 
     @GetMapping("/today")
-    public List<HabitResponse> getTodayHabits(Authentication authentication) {
+    public List<HabitResponse> getTodayHabits(
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        return habitService.getTodayHabits(userDetails.getId());
+        LocalDate queryDate = (date != null) ? date : LocalDate.now();
+        return habitService.getHabitsForDate(userDetails.getId(), queryDate);
     }
 
     @PostMapping("/{habitId}/log")
@@ -38,5 +43,11 @@ public class HabitController {
     public HabitResponse createHabit(Authentication authentication, @RequestBody HabitRequest request) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
         return habitService.createHabit(userDetails.getId(), request);
+    }
+
+    @PostMapping("/seed")
+    public void seedHistory(Authentication authentication) {
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        habitService.seedHistory(userDetails.getId());
     }
 }

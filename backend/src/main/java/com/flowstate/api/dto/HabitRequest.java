@@ -1,11 +1,13 @@
 package com.flowstate.api.dto;
 
+import com.flowstate.api.enums.Frequency;
 import com.flowstate.api.enums.GoalType;
 
 public class HabitRequest {
     private String name;
     private String category;
     private GoalType goalType;
+    private Frequency frequency;
     private Integer goalValue;
     private String unit;
     private String icon;
@@ -33,6 +35,14 @@ public class HabitRequest {
 
     public void setGoalType(GoalType goalType) {
         this.goalType = goalType;
+    }
+
+    public Frequency getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(Frequency frequency) {
+        this.frequency = frequency;
     }
 
     public Integer getGoalValue() {

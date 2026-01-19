@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide number input spinners */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
 @layer base {
   body {
     -webkit-tap-highlight-color: transparent;
@@ -37,6 +63,110 @@
   }
   .glow-orange {
       filter: drop-shadow(0 0 8px rgba(255, 140, 0, 0.4));
+  }
+
+  /* Neo-Glassmorphism Neon Effects */
+  .neon-border-cyan {
+      border: 1.5px solid rgba(0, 242, 255, 0.6);
+      box-shadow: 0 0 12px rgba(0, 242, 255, 0.3), inset 0 0 8px rgba(0, 242, 255, 0.1);
+  }
+  .neon-border-purple {
+      border: 1.5px solid rgba(188, 19, 254, 0.6);
+      box-shadow: 0 0 12px rgba(188, 19, 254, 0.3), inset 0 0 8px rgba(188, 19, 254, 0.1);
+  }
+  .neon-glow-text-cyan {
+      color: #00F2FF;
+      text-shadow: 0 0 10px rgba(0, 242, 255, 0.7), 0 0 20px rgba(0, 242, 255, 0.5);
+  }
+  .neon-glow-text-purple {
+      color: #BC13FE;
+      text-shadow: 0 0 10px rgba(188, 19, 254, 0.7), 0 0 20px rgba(188, 19, 254, 0.5);
+  }
+
+  /* Gradient Glow Button */
+  .neon-btn-gradient {
+      background: linear-gradient(135deg, #00F2FF 0%, #BC13FE 100%);
+      box-shadow: 0 8px 32px rgba(0, 242, 255, 0.4), 0 8px 32px rgba(188, 19, 254, 0.4);
+  }
+  .neon-btn-gradient:hover {
+      box-shadow: 0 12px 48px rgba(0, 242, 255, 0.6), 0 12px 48px rgba(188, 19, 254, 0.6);
+  }
+
+  /* === 3D Icon Animations - Multiple Options === */
+  
+  /* Option 1: Gentle Float (推荐) - 更平滑的上下浮动 */
+  @keyframes gentle-float {
+      0%, 100% { 
+          transform: translateY(0px) translateZ(0);
+      }
+      50% { 
+          transform: translateY(-12px) translateZ(10px);
+      }
+  }
+  .animate-gentle-float {
+      animation: gentle-float 3s ease-in-out infinite;
+  }
+
+  /* Option 2: Orbit Glow - 轨道旋转 + 发光脉冲 */
+  @keyframes orbit-glow {
+      0%, 100% { 
+          transform: translateY(0px) rotate(0deg) scale(1);
+          filter: drop-shadow(0 0 20px rgba(0, 242, 255, 0.4));
+      }
+      25% {
+          transform: translateY(-6px) rotate(-3deg) scale(1.02);
+          filter: drop-shadow(0 0 30px rgba(0, 242, 255, 0.6));
+      }
+      50% { 
+          transform: translateY(-10px) rotate(0deg) scale(1.05);
+          filter: drop-shadow(0 0 40px rgba(0, 242, 255, 0.8));
+      }
+      75% {
+          transform: translateY(-6px) rotate(3deg) scale(1.02);
+          filter: drop-shadow(0 0 30px rgba(0, 242, 255, 0.6));
+      }
+  }
+  .animate-orbit-glow {
+      animation: orbit-glow 4s ease-in-out infinite;
+  }
+
+  /* Option 3: Pulse Scale - 呼吸式缩放 */
+  @keyframes pulse-scale {
+      0%, 100% { 
+          transform: scale(1) translateY(0px);
+          filter: brightness(1);
+      }
+      50% { 
+          transform: scale(1.08) translateY(-8px);
+          filter: brightness(1.2);
+      }
+  }
+  .animate-pulse-scale {
+      animation: pulse-scale 2.5s ease-in-out infinite;
+  }
+
+  /* Option 4: Levitate (悬浮感最强) - 缓慢垂直漂浮 */
+  @keyframes levitate {
+      0%, 100% { 
+          transform: translateY(0px);
+          box-shadow: 0 8px 30px rgba(0, 242, 255, 0.3);
+      }
+      50% { 
+          transform: translateY(-15px);
+          box-shadow: 0 15px 50px rgba(0, 242, 255, 0.5);
+      }
+  }
+  .animate-levitate {
+      animation: levitate 3.5s ease-in-out infinite;
+  }
+
+  /* Pulsating Glow */
+  @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 15px rgba(0, 242, 255, 0.4); }
+      50% { box-shadow: 0 0 30px rgba(0, 242, 255, 0.7); }
+  }
+  .animate-pulse-glow {
+      animation: pulse-glow 2s ease-in-out infinite;
   }
 
   /* Hide scrollbar */
