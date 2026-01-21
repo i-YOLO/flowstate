@@ -13,4 +13,6 @@ public interface HabitRepository extends JpaRepository<Habit, UUID> {
     List<Habit> findByUserAndIsActiveTrue(User user);
 
     List<Habit> findByUserId(UUID userId);
+
+    boolean existsByUserAndNameIgnoreCaseAndIsActiveTrue(User user, String name);
 }

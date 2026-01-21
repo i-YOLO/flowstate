@@ -51,8 +51,18 @@ export const apiFetch = async <T>(url: string, options: FetchOptions = {}): Prom
         }
         
         if (!response.ok) {
-            console.error(`[API] Request failed: ${response.status} ${response.statusText}`);
-            return null;
+            let errorMessage = `[API] Request failed: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData && (errorData.message || errorData.error)) {
+                    errorMessage = errorData.message || errorData.error;
+                }
+            } catch {
+                // Ignore parse error, use default status text
+                errorMessage = response.statusText || errorMessage;
+            }
+            console.error(errorMessage);
+            throw new Error(errorMessage);
         }
         
         // 尝试解析 JSON，如果失败则返回 null
@@ -61,9 +71,9 @@ export const apiFetch = async <T>(url: string, options: FetchOptions = {}): Prom
         } catch {
             return null;
         }
-    } catch (error) {
-        console.error('[API] Network error:', error);
-        return null;
+    } catch (error: any) {
+        console.error('[API] Error in apiFetch:', error);
+        throw error; // 继续抛出，让调用者决定如何处理
     }
 };
 

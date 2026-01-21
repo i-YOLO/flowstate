@@ -172,3 +172,114 @@
 #### 5. 🛠 工程化改进 (Engineering)
 - **`.gitignore` 更新**: 添加 `agent/` 目录到忽略列表。
 - **调试日志**: `handleFinish` 函数增加详细的彩色调试日志，便于排查问题。
+
+## [2026-01-20 00:00]
+### 🎯 习惯频率系统完整实现 (Habit Frequency System)
+
+#### 1. 📊 频率枚举与数据模型 (Frequency Enum & Data Model)
+- **后端枚举**: 新增 `Frequency` 枚举类，支持三种习惯频率：`DAILY`（每日）、`WEEKLY`（每周）、`MONTHLY`（每月）。
+- **实体扩展**: 
+  - `Habit` 实体新增 `frequency` 字段（默认值 `DAILY`），支持枚举类型持久化。
+  - `HabitRequest` 和 `HabitResponse` DTO 均新增 `frequency` 字段传递。
+  - Builder 模式全面支持频率属性设置。
+
+#### 2. 📅 日期查询与周期计算 (Date Filtering & Period Calculation)
+- **按日期查询接口**: 
+  - `HabitController.getTodayHabits()` 接口支持 `date` 查询参数（可选，ISO 8601 格式）。
+  - 未传递日期时默认查询当天，传递日期时查询指定日期的习惯数据。
+  - 后端方法重命名为 `getHabitsForDate()` 以更准确反映功能。
+- **智能进度计算**: 
+  - `HabitService.mapToResponse()` 根据 `frequency` 类型计算当期进度：
+    - **每日习惯**: 统计指定日期的记录总值。
+    - **每周习惯**: 使用 ISO 周字段（`WeekFields.weekOfWeekBasedYear()`）计算当周进度。
+    - **每月习惯**: 按年月过滤记录并累加进度。
+
+#### 3. 🔥 连续打卡统计 (Streak Calculation)
+- **Streak 算法实现**: 
+  - 新增 `calculateCurrentStreak()` 方法，计算习惯的当前连续完成天数。
+  - 仅当最近一次完成日期为今天或昨天时才计入 Streak，否则归零。
+  - 从最近完成日期向前回溯，直到中断为止。
+- **七天状态展示**: 
+  - 新增 `getLastSevenDays()` 方法，返回过去 7 天（从 6 天前到今天）的完成状态布尔数组。
+  - 用于前端展示打卡热力图或趋势线。
+- **数据增强**: `HabitResponse` 新增 `currentStreak` 和 `lastSevenDays` 字段。
+
+#### 4. 🌱 历史数据生成工具 (Seed History)
+- **测试数据生成**: 
+  - 新增 `/api/habits/seed` 接口，为当前用户的所有活跃习惯生成过去 30 天的随机历史记录。
+  - 每天 70% 概率生成记录，数值随机分布在 0 到目标值的 1.5 倍之间。
+  - 自动判定完成状态（达到目标值即标记为完成）。
+- **用途**: 便于开发环境快速验证 Streak 计算、图表展示等功能。
+
+#### 5. 🗓 日期选择弹窗 (Date Selection Modal)
+- **前端组件**: 新增 `DateSelectionModal.tsx` 独立组件。
+- **三种选择模式**: 
+  - **日历模式**: 支持按日选择，显示标准月历视图，高亮今日和选中日期。
+  - **周选择模式**: 按周展示（周一至周日），显示周次和日期范围。
+  - **月选择模式**: 网格展示 12 个月，支持跨年切换。
+- **交互优化**: 
+  - 点击日期/周/月后自动关闭弹窗并更新选择。
+  - 支持月份切换（前进/后退）。
+  - 底部滑入动画和背景模糊效果。
+
+#### 6. 🏠 首页交互增强 (HomeView Enhancement)
+- **频率 Tab 切换**: 顶部新增 `DAILY` / `WEEKLY` / `MONTHLY` 三个频率标签，点击切换当前查看频率。
+- **日期选择器集成**: 点击日历图标打开 `DateSelectionModal`，选择日期后自动刷新习惯列表。
+- **动态查询**: 切换频率或日期时，向后端传递 `date` 参数重新加载对应周期的习惯数据。
+- **打卡交互优化**: 
+  - 未完成习惯显示"记录"按钮，支持鼠标悬停颜色渐变和发光效果。
+  - 已完成习惯显示绿色打勾按钮，支持单击撤销（传递 `-1` 增量）。
+  - 打卡中状态显示旋转加载动画，防止重复点击。
+- **Toast 通知**: 新增底部中央 Toast 提示区域，支持成功/失败消息展示（绿色/红色主题）。
+- **连续天数展示**: 
+  - 每个习惯卡片底部新增 `lastSevenDays` 点阵图，直观展示过去 7 天的完成情况。
+  - 显示当前 Streak 数值（火焰图标 + 数字）。
+
+#### 7. 🛡 错误处理增强 (Error Handling)
+- **API 错误提示**: 
+  - `api.ts` 工具函数优化，非 200 状态码时解析并抛出服务端错误消息。
+  - 支持展示后端返回的 `message` 或 `error` 字段。
+  - 网络错误统一抛出异常，由调用方决定处理策略。
+- **用户友好提示**: 前端捕获 API 错误后显示 Toast 提示，避免静默失败。
+
+#### 8. 🎨 样式与依赖优化 (Styling & Dependencies)
+- **Tailwind CSS 生态**: 
+  - 安装 `tailwindcss 3.4.19` 及其依赖（`postcss`、`autoprefixer`、`fast-glob`、`sucrase` 等）。
+  - 配置 `postcss.config.js` 和 `tailwind.config.js`，支持 Tailwind 类名的 JIT 编译。
+- **`package-lock.json` 更新**: 新增大量 Tailwind 构建工具链依赖（如 `chokidar`、`micromatch`、`reusify` 等）。
+- **全局样式调整**: `index.css` 可能包含针对新 UI 组件的样式定义（如 Toast 动画、模态框过渡效果）。
+
+#### 9. 🗄️ 数据库查询优化 (Repository Enhancements)
+- **新增查询方法**: 
+  - `HabitLogRepository.findByHabitAndDateAfterOrderByDateDesc()` 支持查询某习惯在指定日期后的所有日志（按日期倒序）。
+  - 用于 Streak 计算和历史趋势分析。
+- **性能考虑**: 查询限制在近期数据范围（如 12 个月、7 天），避免全表扫描。
+
+## [2026-01-21 16:00]
+### 📊 统计分析看板 (Analytics Dashboard)
+
+#### 1. 📈 全维度数据可视化 (Data Visualization)
+- **后端架构**: 
+  - 新增 `AnalyticsController` 和 `AnalyticsService`，提供时间分配、习惯一致性、热力图及成就统计接口。
+  - 定义了 `HabitHeatmapDTO`, `TimeAllocationDTO` 等数据传输对象，规范前后端数据契约。
+  - 扩展 `HabitLogRepository`，新增 `getHeatmapDataByRange` 方法，支持跨年及自定义日期范围的热力图数据查询。
+- **前端实现**:
+  - 全新 `AnalyticsView.tsx` 组件，集成 `Recharts` 库实现环形图、折线图和柱状图的动态切换。
+  - 支持 **多维度时间筛选**：日、周、月、年及自定义日期范围（集成 DatePicker）。
+  - **智能数据聚合**：年视图下自动按 15 天聚合数据，优化长期趋势展示。
+
+#### 2. 🔥 习惯热力图 (Habit Heatmap Ultimate)
+- **视觉升级**: 
+  - 采用 **GitHub Dark 风格**的高对比度绿色阶梯 (`#0e4429` -> `#39d353`)，替代原有低对比度配色。
+  - 方块圆角优化至 `2.5px`，提升视觉柔和度。
+- **交互优化**: 
+  - **自动滚动**：组件加载后自动定位到最右侧最新日期。
+  - **移动端适配**：默认显示最近 6 个月数据，完美适配手机屏幕宽度，避免过度横向滚动。
+  - **API 归一化**：前端统一处理日期格式为 `YYYY/MM/DD`，并强制对其午夜时间，解决组件渲染空白问题。
+
+#### 3. 📱 移动端适配与体验 (Mobile & UX)
+- **响应式布局**: 图表容器使用 `ResponsiveContainer`，确保在不同屏幕尺寸下均能完整显示。
+- **细节打磨**: 
+  - 移除了冗余的"数据统计中"占位符。
+  - 优化了标题和按钮在移动端的排版和触摸区域。
+  - 修复了 Nginx 路由配置，确保 `/api/analytics` 路径正确转发。

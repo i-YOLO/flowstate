@@ -1,5 +1,6 @@
 package com.flowstate.api.entity;
 
+import com.flowstate.api.enums.Frequency;
 import com.flowstate.api.enums.GoalType;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -28,6 +29,10 @@ public class Habit {
     @Enumerated(EnumType.STRING)
     private GoalType goalType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Frequency frequency = Frequency.DAILY;
+
     private Integer goalValue;
     private String unit;
     private String icon;
@@ -47,7 +52,7 @@ public class Habit {
     public Habit() {
     }
 
-    public Habit(UUID id, User user, String name, String category, GoalType goalType, Integer goalValue, String unit,
+    public Habit(UUID id, User user, String name, String category, GoalType goalType, Frequency frequency, Integer goalValue, String unit,
             String icon, String color, Boolean isActive, List<HabitLog> logs, LocalDateTime createdAt,
             LocalDateTime updatedAt) {
         this.id = id;
@@ -55,6 +60,7 @@ public class Habit {
         this.name = name;
         this.category = category;
         this.goalType = goalType;
+        this.frequency = frequency != null ? frequency : Frequency.DAILY;
         this.goalValue = goalValue;
         this.unit = unit;
         this.icon = icon;
@@ -104,6 +110,14 @@ public class Habit {
 
     public void setGoalType(GoalType goalType) {
         this.goalType = goalType;
+    }
+
+    public Frequency getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(Frequency frequency) {
+        this.frequency = frequency;
     }
 
     public Integer getGoalValue() {
@@ -199,6 +213,11 @@ public class Habit {
 
         public Builder goalType(GoalType goalType) {
             habit.setGoalType(goalType);
+            return this;
+        }
+
+        public Builder frequency(Frequency frequency) {
+            habit.setFrequency(frequency);
             return this;
         }
 

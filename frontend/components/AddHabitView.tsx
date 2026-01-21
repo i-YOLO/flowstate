@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch, API_BASE_URL } from '../utils/api';
 
 interface AddHabitViewProps {
   onCancel: () => void;
@@ -14,6 +15,8 @@ const AddHabitView: React.FC<AddHabitViewProps> = ({ onCancel, onSave }) => {
   const [selectedIcon, setSelectedIcon] = useState('water_drop');
   const [selectedColor, setSelectedColor] = useState('bg-primary');
   const [name, setName] = useState('');
+  const [goalValue, setGoalValue] = useState<number>(1);
+  const [unit, setUnit] = useState('次');
 
   // Frequency State
   const [frequency, setFrequency] = useState('每天');
@@ -33,35 +36,41 @@ const AddHabitView: React.FC<AddHabitViewProps> = ({ onCancel, onSave }) => {
     }
   };
 
-  const handleCreateHabit = async () => {
-    if (!name.trim()) return;
+  const [loading, setLoading] = useState(false);
+  const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
 
+  const handleCreateHabit = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName || loading) return;
+
+    setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:4000/api/habits', {
+      // Map Chinese frequency to English enum
+      const frequencyMap: Record<string, string> = {
+        '每天': 'DAILY',
+        '每周': 'WEEKLY',
+        '每月': 'MONTHLY'
+      };
+
+      await apiFetch(`${API_BASE_URL}/api/habits`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: name,
+        body: {
+          name: trimmedName,
           icon: selectedIcon,
-          // Map color class to backend expected value
           color: mapColorToBackend(selectedColor),
           category: '通用',
-          goalValue: 1,
-          unit: '次'
-        })
+          frequency: frequencyMap[frequency] || 'DAILY',
+          goalValue: goalValue,
+          unit: unit
+        }
       });
-
-      if (response.ok) {
-        onSave();
-      } else {
-        console.error('Failed to create habit');
-      }
-    } catch (err) {
+      // 如果没有抛出错误，说明成功了
+      onSave();
+    } catch (err: any) {
       console.error(err);
+      setErrorModal({ show: true, message: err.message || '网络请求失败，请检查连接' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -79,170 +88,145 @@ const AddHabitView: React.FC<AddHabitViewProps> = ({ onCancel, onSave }) => {
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white min-h-screen font-display flex flex-col">
       <div className="max-w-[480px] w-full mx-auto min-h-screen flex flex-col bg-background-light dark:bg-background-dark pb-24">
-        {/* TopAppBar */}
-        <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        {/* Neo-Glassmorphism Header */}
+        <header className="sticky top-0 z-50 bg-black/95 backdrop-blur-xl">
           <div className="flex items-center p-4 justify-between">
-            <button onClick={onCancel} className="text-primary text-base font-medium">取消</button>
-            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight flex-1 text-center">新建习惯</h2>
+            <button onClick={onCancel} className="text-slate-400 text-base font-medium hover:text-white transition-colors">取消</button>
+            <h2 className="text-white text-lg font-bold leading-tight tracking-tight flex-1 text-center">创建新习惯</h2>
             <div className="w-12"></div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto">
-          {/* TextField: Habit Name */}
-          <div className="flex flex-col gap-2 px-4 py-6">
-            <label className="flex flex-col w-full">
-              <p className="text-slate-600 dark:text-slate-400 text-sm font-semibold uppercase tracking-wider pb-2">习惯名称</p>
-              <input
-                className="flex w-full rounded-xl text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary border-none bg-white dark:bg-[#192233] h-14 placeholder:text-slate-400 dark:placeholder:text-[#92a4c9] px-4 text-lg font-medium shadow-sm"
-                placeholder="例如：喝水"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
+        <main className="flex-1 overflow-y-auto bg-black no-scrollbar flex flex-col pt-2">
+          {/* 3D Floating Icon Preview - Balanced */}
+          <div className="flex flex-col items-center py-6">
+            <div className="relative size-28 flex items-center justify-center animate-pulse-scale">
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-cyan-500/20 to-purple-600/20 blur-xl"></div>
+              <div className="relative size-24 rounded-2xl bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a] flex items-center justify-center neon-border-cyan">
+                <span className="material-symbols-outlined text-4xl text-white glow-cyan">{selectedIcon}</span>
+              </div>
+            </div>
           </div>
 
-          {/* SectionHeader: Choose Icon */}
-          <div className="px-4 pt-2">
-            <h3 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">图标 & 样式</h3>
+          {/* Habit Name Input */}
+          <div className="px-8 pb-6">
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] pb-1.5 opacity-80">习惯名称</p>
+            <input
+              className="w-full rounded-2xl text-white focus:outline-0 focus:ring-2 focus:ring-cyan-500/50 border border-white/10 bg-[#111118] h-14 placeholder:text-slate-700 px-6 text-base font-medium shadow-inner"
+              placeholder="例如：阅读一本书"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
 
-          {/* Icon Library */}
-          <div className="grid grid-cols-4 gap-3 p-4">
-            {icons.map((icon) => (
-              <button
-                key={icon}
-                onClick={() => setSelectedIcon(icon)}
-                className={`flex flex-col items-center justify-center aspect-square rounded-xl transition-all duration-200 ${selectedIcon === icon
-                  ? 'border-2 border-primary bg-primary/10'
-                  : 'border border-slate-200 dark:border-[#324467] bg-white dark:bg-[#192233] hover:bg-slate-50 dark:hover:bg-[#202b40]'
-                  }`}
-              >
-                <span className={`material-symbols-outlined text-3xl ${selectedIcon === icon ? 'text-primary' : 'text-slate-600 dark:text-white'
-                  }`}>
-                  {icon}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Color Picker - Shifted layout as requested */}
-          <div className="px-4 py-2">
-            <p className="text-slate-600 dark:text-slate-400 text-sm font-semibold uppercase tracking-wider pb-3">主题颜色</p>
-            {/* Added pl-2 pt-2 to shift items slightly down-right */}
-            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 px-1 pl-3 pt-2">
-              {colors.map((bg) => (
+          {/* 3D Icon Selector - Elegant Scaling */}
+          <div className="px-0 pb-6 relative overflow-hidden">
+            <div className="flex gap-4 overflow-x-auto no-scrollbar py-3 px-8">
+              {icons.map((icon) => (
                 <button
-                  key={bg}
-                  onClick={() => setSelectedColor(bg)}
-                  className={`size-10 rounded-full ${bg} shrink-0 transition-all duration-200 ${selectedColor === bg
-                    ? 'ring-2 ring-offset-2 ring-offset-background-light dark:ring-offset-background-dark ring-primary scale-110'
-                    : 'hover:scale-105 opacity-80 hover:opacity-100'
+                  key={icon}
+                  onClick={() => setSelectedIcon(icon)}
+                  className={`shrink-0 size-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedIcon === icon
+                    ? 'bg-gradient-to-br from-cyan-500/10 to-purple-600/10 neon-border-cyan scale-105'
+                    : 'bg-[#111118] border border-white/5 hover:border-white/20'
                     }`}
-                ></button>
+                >
+                  <span className={`material-symbols-outlined text-2xl transition-all ${selectedIcon === icon ? 'text-cyan-400 glow-cyan' : 'text-slate-500'}`}>
+                    {icon}
+                  </span>
+                </button>
               ))}
             </div>
           </div>
 
-          {/* SectionHeader: Frequency */}
-          <div className="px-4 pt-6">
-            <h3 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">时间安排</h3>
-          </div>
-          <div className="p-4 space-y-4">
-            {/* Segmented Control for Frequency */}
-            <div className="flex p-1 bg-slate-200 dark:bg-[#192233] rounded-xl">
-              {['每天', '每周', '自定义'].map((f) => (
+          {/* Frequency Section - Balanced */}
+          <div className="px-8 pt-4 pb-8">
+            <h2 className="text-white text-base font-bold mb-4">频率设置</h2>
+            <div className="flex p-1.5 bg-[#111118] rounded-full border border-white/5">
+              {['每天', '每周', '每月'].map((f) => (
                 <button
                   key={f}
                   onClick={() => setFrequency(f)}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${frequency === f
-                    ? 'bg-white dark:bg-[#324467] text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400'
+                  className={`flex-1 py-2.5 text-xs font-semibold rounded-full transition-all duration-300 ${frequency === f
+                    ? 'bg-gradient-to-r from-cyan-500 to-purple-600 text-white shadow-lg shadow-cyan-500/10'
+                    : 'text-slate-500 hover:text-slate-300'
                     }`}
                 >
                   {f}
                 </button>
               ))}
             </div>
-            {/* Days of week - Interactive and starting with Sunday */}
-            <div className="flex justify-between gap-1">
-              {days.map((d, i) => {
-                const isSelected = selectedDays.includes(i);
-                return (
-                  <button
-                    key={i}
-                    onClick={() => toggleDay(i)}
-                    className={`size-11 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-200 ${isSelected
-                      ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105'
-                      : 'border border-slate-300 dark:border-[#324467] text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#202b40]'
-                      }`}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
-          {/* Reminder Section */}
-          <div className="px-4 py-2">
-            <div className="flex items-center justify-between bg-white dark:bg-[#192233] p-4 rounded-xl border border-slate-200 dark:border-[#324467]">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg transition-colors ${reminderEnabled ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                  <span className={`material-symbols-outlined ${reminderEnabled ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>notifications_active</span>
-                </div>
-                <div>
-                  <p className="text-slate-900 dark:text-white font-bold">提醒</p>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs">设置每日提醒</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`font-bold transition-opacity ${reminderEnabled ? 'text-primary opacity-100' : 'text-slate-400 opacity-50'}`}>上午 08:00</span>
-
-                {/* Reminder Toggle */}
-                <div
-                  onClick={() => setReminderEnabled(!reminderEnabled)}
-                  className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors duration-300 ${reminderEnabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}
-                >
-                  <div className={`size-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-all duration-300 ${reminderEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Social Toggle */}
-          <div className="px-4 py-4">
-            <div className="flex items-center justify-between bg-white dark:bg-[#192233] p-4 rounded-xl border border-slate-200 dark:border-[#324467]">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg transition-colors ${socialEnabled ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                  <span className={`material-symbols-outlined ${socialEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>group</span>
-                </div>
-                <div>
-                  <p className="text-slate-900 dark:text-white font-bold">社交追踪</p>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs">朋友可以看到你的进度</p>
-                </div>
-              </div>
-
-              {/* Social Toggle Switch */}
-              <div
-                onClick={() => setSocialEnabled(!socialEnabled)}
-                className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors duration-300 ${socialEnabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}
+          {/* Target Section - Balanced */}
+          <div className="px-8 pb-10 text-center">
+            <h2 className="text-white text-base font-bold mb-5">习惯目标</h2>
+            <div className="flex items-center justify-center gap-10">
+              <button 
+                onClick={() => setGoalValue(Math.max(1, goalValue - 1))}
+                className="size-12 rounded-full bg-[#111118] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-cyan-500/50 transition-all active:scale-95 shadow-lg"
               >
-                <div className={`size-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-all duration-300 ${socialEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
+                <span className="material-symbols-outlined text-xl">remove</span>
+              </button>
+              <div className="text-5xl font-black neon-glow-text-purple min-w-[80px] tracking-tight">
+                {goalValue}
               </div>
+              <button 
+                onClick={() => setGoalValue(goalValue + 1)}
+                className="size-12 rounded-full bg-[#111118] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-purple-500/50 transition-all active:scale-95 shadow-lg"
+              >
+                <span className="material-symbols-outlined text-xl">add</span>
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-2.5 mt-4">
+              <p className="text-slate-500 text-sm font-medium">{goalValue}</p>
+              <input 
+                type="text"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="bg-transparent border-b border-white/10 text-white text-sm font-bold w-10 text-center focus:outline-none focus:border-purple-500 transition-colors"
+                placeholder="次"
+              />
+              <p className="text-slate-500 text-sm font-medium">/ {frequency}</p>
             </div>
           </div>
-          <div className="h-10"></div>
-        </main>
 
-        {/* Fixed Footer Action */}
-        <footer className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto p-4 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm">
-          <button onClick={handleCreateHabit} className="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/25 transition-all active:scale-[0.98]">
-            创建习惯
-          </button>
-        </footer>
+          {/* Create Button - Now in document flow */}
+          <div className="px-8 pb-8">
+            <button 
+              onClick={handleCreateHabit} 
+              disabled={loading}
+              className={`w-full font-bold py-4 rounded-full text-base transition-all ${loading ? 'bg-slate-700 cursor-not-allowed text-slate-400' : 'neon-btn-gradient text-white active:scale-[0.98]'}`}
+            >
+              {loading ? '正在创建...' : '创建新习惯'}
+            </button>
+          </div>
+        </main>
       </div>
+
+      {/* Custom Error Modal */}
+      {errorModal.show && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="w-full max-w-[320px] bg-[#1C2333] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 ease-out-expo">
+              <div className="p-8 flex flex-col items-center text-center">
+                 <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-red-500 text-[32px]">error</span>
+                 </div>
+                 <h3 className="text-white text-xl font-bold mb-2">出错了</h3>
+                 <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                    {errorModal.message}
+                 </p>
+                 <button 
+                   onClick={() => setErrorModal({ show: false, message: '' })}
+                   className="w-full py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-2xl transition-all active:scale-95 border border-white/5"
+                 >
+                    知道了
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
