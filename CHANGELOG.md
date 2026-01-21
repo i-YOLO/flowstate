@@ -254,3 +254,32 @@
   - `HabitLogRepository.findByHabitAndDateAfterOrderByDateDesc()` 支持查询某习惯在指定日期后的所有日志（按日期倒序）。
   - 用于 Streak 计算和历史趋势分析。
 - **性能考虑**: 查询限制在近期数据范围（如 12 个月、7 天），避免全表扫描。
+
+## [2026-01-21 16:00]
+### 📊 统计分析看板 (Analytics Dashboard)
+
+#### 1. 📈 全维度数据可视化 (Data Visualization)
+- **后端架构**: 
+  - 新增 `AnalyticsController` 和 `AnalyticsService`，提供时间分配、习惯一致性、热力图及成就统计接口。
+  - 定义了 `HabitHeatmapDTO`, `TimeAllocationDTO` 等数据传输对象，规范前后端数据契约。
+  - 扩展 `HabitLogRepository`，新增 `getHeatmapDataByRange` 方法，支持跨年及自定义日期范围的热力图数据查询。
+- **前端实现**:
+  - 全新 `AnalyticsView.tsx` 组件，集成 `Recharts` 库实现环形图、折线图和柱状图的动态切换。
+  - 支持 **多维度时间筛选**：日、周、月、年及自定义日期范围（集成 DatePicker）。
+  - **智能数据聚合**：年视图下自动按 15 天聚合数据，优化长期趋势展示。
+
+#### 2. 🔥 习惯热力图 (Habit Heatmap Ultimate)
+- **视觉升级**: 
+  - 采用 **GitHub Dark 风格**的高对比度绿色阶梯 (`#0e4429` -> `#39d353`)，替代原有低对比度配色。
+  - 方块圆角优化至 `2.5px`，提升视觉柔和度。
+- **交互优化**: 
+  - **自动滚动**：组件加载后自动定位到最右侧最新日期。
+  - **移动端适配**：默认显示最近 6 个月数据，完美适配手机屏幕宽度，避免过度横向滚动。
+  - **API 归一化**：前端统一处理日期格式为 `YYYY/MM/DD`，并强制对其午夜时间，解决组件渲染空白问题。
+
+#### 3. 📱 移动端适配与体验 (Mobile & UX)
+- **响应式布局**: 图表容器使用 `ResponsiveContainer`，确保在不同屏幕尺寸下均能完整显示。
+- **细节打磨**: 
+  - 移除了冗余的"数据统计中"占位符。
+  - 优化了标题和按钮在移动端的排版和触摸区域。
+  - 修复了 Nginx 路由配置，确保 `/api/analytics` 路径正确转发。
